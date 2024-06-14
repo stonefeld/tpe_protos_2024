@@ -1,19 +1,13 @@
-CC=gcc
-CFLAGS=-Wall -std=c99 -pedantic -pthread
-
-# Descomentar para debuguear
-# CFLAGS+=-g
-# LDFLAGS=-fsanitize=address
+CFLAGS=-std=c11 -pedantic -pedantic-errors -g -Wall -Werror -Wextra -D_POSIX_C_SOURCE=200112L -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+LDFLAGS=-fsanitize=address
 
 SRC=$(wildcard src/*.c)
 OBJ=$(patsubst src/%.c,build/%.o,$(SRC))
 BIN=build/smtpd
 
-.PHONY: build
+all: dir $(BIN)
 
-all: dir build
-
-build: $(OBJ)
+$(BIN): $(OBJ)
 	$(CC) -o $(BIN) $^ $(LDFLAGS)
 
 build/%.o: src/%.c

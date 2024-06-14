@@ -13,3 +13,9 @@ compile_commands.json
 # Test files not wanted
 *.txt
 test*/
+
+# Vim files
+*.vim
+
+# Patches directory
+patches/
