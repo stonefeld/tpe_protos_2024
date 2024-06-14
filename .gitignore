@@ -10,10 +10,6 @@ build/
 # clangd files I don't want
 compile_commands.json
 
-# Test files not wanted
-*.txt
-test*/
-
 # Vim files
 *.vim
 
