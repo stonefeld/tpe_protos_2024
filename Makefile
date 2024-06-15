@@ -1,4 +1,4 @@
-CFLAGS=-std=c11 -pedantic -pedantic-errors -g -Wall -Werror -Wextra -D_POSIX_C_SOURCE=200112L -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+CFLAGS=-std=c11 -Iinclude -pedantic -pedantic-errors -g -Wall -Werror -Wextra -D_POSIX_C_SOURCE=200112L -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 LDFLAGS=-fsanitize=address
 
 SRC=$(wildcard src/*.c)
