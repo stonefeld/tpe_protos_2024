@@ -1,5 +1,5 @@
-#ifndef STM_H_wL7YxN65ZHqKGvCPrNbPtMJgL8B
-#define STM_H_wL7YxN65ZHqKGvCPrNbPtMJgL8B
+#ifndef __STM_H__
+#define __STM_H__
 
 #include "selector.h"
 

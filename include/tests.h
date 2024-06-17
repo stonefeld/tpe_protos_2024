@@ -1,8 +1,6 @@
-#ifndef TEST_H_8VyRIy8mLICCGx62mh19ScMWpkI
-#define TEST_H_8VyRIy8mLICCGx62mh19ScMWpkI
+#ifndef __TESTS_H__
+#define __TESTS_H__
 
-
-#define N(x) (sizeof(x)/sizeof(x[0]))
-
+#define N(x) (sizeof(x) / sizeof(x[0]))
 
 #endif
