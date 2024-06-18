@@ -81,7 +81,7 @@ selector_status selector_init(const struct selector_init* c);
 /** deshace la incialización de la librería */
 selector_status selector_close(void);
 
-/* instancia un nuevo selector. returna NULL si no puede instanciar  */
+/* instancia un nuevo selector. retorna NULL si no puede instanciar  */
 fd_selector selector_new(const size_t initial_elements);
 
 /** destruye un selector creado por _new. Tolera NULLs */

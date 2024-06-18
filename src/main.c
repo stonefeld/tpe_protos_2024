@@ -12,8 +12,7 @@
  */
 #include "args.h"
 #include "selector.h"
-// #include "socks5.h"
-// #include "socks5nio.h"
+#include "smtpnio.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -105,14 +104,13 @@ main(int argc, char** argv)
 		goto finally;
 	}
 
-	const struct fd_handler socksv5 = {
-		// .handle_read = socksv5_passive_accept,
-		.handle_read = NULL,
+	const struct fd_handler smtp = {
+		.handle_read = smtp_passive_accept,
 		.handle_write = NULL,
 		.handle_close = NULL,  // nada que liberar
 	};
 
-	ss = selector_register(selector, server, &socksv5, OP_READ, NULL);
+	ss = selector_register(selector, server, &smtp, OP_READ, NULL);
 
 	if (ss != SELECTOR_SUCCESS) {
 		err_msg = "registering fd";
