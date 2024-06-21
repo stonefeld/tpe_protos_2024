@@ -53,11 +53,12 @@ usage(const char* progname)
 	        "Usage: %s [OPTION]...\n"
 	        "\n"
 	        "   -h               Imprime la ayuda y termina.\n"
-	        "   -l <SOCKS addr>  Dirección donde servirá el proxy SOCKS.\n"
+	        "   -l <SMTP addr>  Dirección donde servirá el servidor SMTP.\n"
 	        "   -L <conf  addr>  Dirección donde servirá el servicio de management.\n"
-	        "   -p <SOCKS port>  Puerto entrante conexiones SOCKS.\n"
+	        "   -p <SMTP port>  Puerto entrante conexiones SMTP.\n"
 	        "   -P <conf port>   Puerto entrante conexiones configuracion\n"
 	        "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
+			"   -T               Apaga las transformaciones.\n"
 	        "   -v               Imprime información sobre la versión versión y termina.\n"
 	        "\n"
 	        "   --doh-ip    <ip>    \n"
@@ -76,13 +77,13 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 {
 	memset(args, 0, sizeof(*args));  // sobre todo para setear en null los punteros de users
 
-	args->socks_addr = "0.0.0.0";
-	args->socks_port = 1080;
+	args->smtp_addr = "0.0.0.0";
+	args->smtp_port = 1209;
 
 	args->mng_addr = "127.0.0.1";
 	args->mng_port = 8080;
 
-	args->disectors_enabled = true;
+	args->transform_enabled = true;
 
 	args->doh.host = "localhost";
 	args->doh.ip = "127.0.0.1";
@@ -101,30 +102,36 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 			{ "doh-query", required_argument, 0, 0xD005 }, { 0, 0, 0, 0 }
 		};
 
-		c = getopt_long(argc, argv, "hl:L:Np:P:u:v", long_options, &option_index);
+		c = getopt_long(argc, argv, "hl:L:Tp:P:u:v", long_options, &option_index);
 		if (c == -1)
 			break;
 
 		switch (c) {
-			case 'h':
+			case 'h': {
 				usage(argv[0]);
-				break;
-			case 'l':
-				args->socks_addr = optarg;
-				break;
-			case 'L':
+			} break;
+
+			case 'l': {
+				args->smtp_addr = optarg;
+			} break;
+
+			case 'L':{
 				args->mng_addr = optarg;
-				break;
-			case 'N':
-				args->disectors_enabled = false;
-				break;
-			case 'p':
-				args->socks_port = port(optarg);
-				break;
-			case 'P':
+			} break;
+
+			case 'N': {
+				args->transform_enabled = false;
+			} break;
+
+			case 'p': {
+				args->smtp_port = port(optarg);
+			} break;
+
+			case 'P': {
 				args->mng_port = port(optarg);
-				break;
-			case 'u':
+			} break;
+
+			case 'u': {
 				if (nusers >= MAX_USERS) {
 					fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
 					exit(1);
@@ -132,31 +139,40 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 					user(optarg, args->users + nusers);
 					nusers++;
 				}
-				break;
-			case 'v':
+			} break;
+
+			case 'v': {
 				version();
 				exit(0);
-				break;
-			case 0xD001:
+			} break;
+
+			case 0xD001: {
 				args->doh.ip = optarg;
-				break;
-			case 0xD002:
+			} break;
+
+			case 0xD002: {
 				args->doh.port = port(optarg);
-				break;
-			case 0xD003:
+			} break;
+
+			case 0xD003: {
 				args->doh.host = optarg;
-				break;
-			case 0xD004:
+			} break;
+
+			case 0xD004: {
 				args->doh.path = optarg;
-				break;
-			case 0xD005:
+			} break;
+
+			case 0xD005: {
 				args->doh.query = optarg;
-				break;
-			default:
+			} break;
+
+			default: {
 				fprintf(stderr, "unknown argument %d.\n", c);
 				exit(1);
+			} break;
 		}
 	}
+
 	if (optind < argc) {
 		fprintf(stderr, "argument not accepted: ");
 		while (optind < argc) {

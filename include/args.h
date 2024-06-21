@@ -22,13 +22,13 @@ struct doh
 
 struct socks5args
 {
-	char* socks_addr;
-	unsigned short socks_port;
+	char* smtp_addr;
+	unsigned short smtp_port;
 
 	char* mng_addr;
 	unsigned short mng_port;
 
-	bool disectors_enabled;
+	bool transform_enabled;
 
 	struct doh doh;
 	struct users users[MAX_USERS];
