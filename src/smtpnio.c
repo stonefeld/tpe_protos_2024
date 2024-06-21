@@ -257,8 +257,9 @@ smtp_passive_accept(struct selector_key* key)
 	buffer_init(&state->read_buffer, N(state->raw_buff_read), state->raw_buff_read);
 	buffer_init(&state->write_buffer, N(state->raw_buff_write), state->raw_buff_write);
 
-	memcpy(&state->raw_buff_write, "HELLO\n", 5);
-	buffer_write_adv(&state->write_buffer, 5);
+	char* hello = "220 localhost SMTP\n";
+	memcpy(&state->raw_buff_write, hello, strlen(hello));
+	buffer_write_adv(&state->write_buffer, strlen(hello));
 
 	state->request_parser.request = &state->request;
 	request_parser_init(&state->request_parser);

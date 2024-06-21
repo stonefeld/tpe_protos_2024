@@ -25,19 +25,23 @@ static enum request_state
 verb(const uint8_t c, struct request_parser* p)
 {
 	enum request_state next;
-	if (c == ' ') {
-		next = request_sep_arg1;
-	} else {
-		next = request_error;
+	switch (c) {
+		case '\r': {
+			next = request_cr;
+		} break;
+
+		default: {
+			next = request_verb;
+		} break;
 	}
-	/* switch (c) {
-	    case 0x05:
-	        next = request_sep_arg1;
-	        break;
-	    default:
-	        next = request_error;
-	        break;
-	} */
+
+	if (next == request_verb) {
+		p->request->verb[p->i++] = c;
+	} else {
+		p->request->verb[p->i] = 0;
+		/*if (strcmp(p->request->verb, "data") == 0)
+		    next = request_data;*/
+	}
 
 	return next;
 }
@@ -69,39 +73,32 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 	switch (p->state) {
 		case request_verb: {
-			switch (c) {
-				case '\r': {
-					next = request_cr;
-				} break;
-
-				default: {
-					next = request_verb;
-				} break;
-			}
+			next = verb(c, p);
 		} break;
 
-			/* case request_sep_arg1:
-			    next = sep_arg(c, p);
-			    break;
-			case request_arg1:
-			    next = arg1(c, p);
-			    break; */
-
-		case request_cr: {
-			switch (c) {
-				case '\n':
-					next = request_done;
-					break;
-				default:
-					next = request_verb;
-					break;
-			}
+		case request_sep_arg1: {
+			next = sep_arg1(c, p);
 		} break;
 
+		case request_arg1: {
+            next = arg1(c, p);
+		} break;
+
+        case request_cr: {
+            switch (c) {
+                case '\n': {
+                    next = request_done;
+				} break;
+
+                default: {
+                    next = request_verb;
+				} break;
+            }
+		} break;
+
+		case request_data:
 		case request_done:
 		case request_error: {
-			/*case request_error_unsupported_version:
-			case request_error_unsupported_atyp:*/
 			next = p->state;
 		} break;
 
