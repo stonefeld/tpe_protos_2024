@@ -37,8 +37,8 @@ verb(const uint8_t c, struct request_parser* p)
 
 	if (next == request_verb) {
 		p->request->verb[p->i++] = c;
-		if (p->i < sizeof(p->request->verb) - 1)  // TODO: Check this
-			p->request->verb[p->i++] = (char)c;
+		// if (p->i < sizeof(p->request->verb) - 1)  // TODO: Check this
+		// 	p->request->verb[p->i++] = (char)c;
 	} else {
 		p->request->verb[p->i] = 0;
 		/*if (strcmp(p->request->verb, "data") == 0)

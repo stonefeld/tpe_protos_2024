@@ -24,6 +24,17 @@
 
 enum smtp_state
 {
+	GREETING_WRITE,
+	EHLO_READ,
+	EHLO_WRITE,
+
+	MAIL_FROM_READ,
+	/* MAIL_FROM_RESPONSE_WRITE,
+	RCPT_TO_READ,
+	RCPT_TO_RESPONSE_WRITE,
+	DATA_READ,
+	DATA_RESPONSE_WRITE, */
+
 	/**
 	 * enviar mensaje de `HELLO` al cliente
 	 *
@@ -35,7 +46,7 @@ enum smtp_state
 	 *  - REQUEST_READ    cuando se enviaron todos los bytes
 	 *  - ERROR           ante cualquier error
 	 */
-	RESPONSE_WRITE,
+	// RESPONSE_WRITE,
 
 	/**
 	 * leer respuesta del cliente al mensaje `HELLO`
@@ -47,7 +58,7 @@ enum smtp_state
 	 *  - REQUEST_READ   mientras el mensaje no esté completo
 	 *  - ERROR 		 ante cualquier error
 	 */
-	REQUEST_READ,
+	// REQUEST_READ,
 
 	/**
 	 * lee la data del cliente.
@@ -55,7 +66,7 @@ enum smtp_state
 	 * Intereses:
 	 *  - OP_READ sobre client_fd
 	 */
-	DATA_READ,
+	// DATA_READ,
 
 	/**
 	 * escribe la data del cliente.
@@ -69,7 +80,7 @@ enum smtp_state
 	 *  - DATA_READ     cuando se me vacio el buffer
 	 *  - ERROR         ante cualquier error (IO/parseo)
 	 */
-	DATA_WRITE,
+	// DATA_WRITE,
 
 	DONE,
 	ERROR
@@ -107,115 +118,18 @@ struct status
 
 struct status global_status = { 0 };
 
-static void
-request_read_init(const unsigned st, struct selector_key* key)
+static unsigned
+greeting_write(struct selector_key* key)
 {
-	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	p->request = &ATTACHMENT(key)->request;
-	request_parser_init(p);
-}
-
-static void
-request_read_close(const unsigned state, struct selector_key* key)
-{
-	request_close(&ATTACHMENT(key)->request_parser);
-}
-
-static enum smtp_state
-request_process(struct smtp* state)
-{
-	if (strcasecmp(state->request_parser.request->verb, "data") == 0) {
-		state->is_data = true;
-		return RESPONSE_WRITE;
-	}
-
-	if (strcasecmp(state->request_parser.request->verb, "mail from") == 0) {
-		// TODO: Check arg1
-		strcpy(state->mailfrom, state->request_parser.request->arg1);
-
-		size_t count;
-		uint8_t* ptr;
-
-		// Generate response
-		ptr = buffer_write_ptr(&state->write_buffer, &count);
-
-		// TODO: Check count with n (min(n,count))
-		strcpy((char*)ptr, "250 Ok\r\n");
-		buffer_write_adv(&state->write_buffer, 8);
-
-		return RESPONSE_WRITE;
-	}
-	if (strcasecmp(state->request_parser.request->verb, "ehlo") == 0) {
-		/*
-		 *  250-emilio
-		    250-PIPELINING
-		    250 SIZE 10240000
-		 * */
-		return RESPONSE_WRITE;
-	}
+	unsigned ret = GREETING_WRITE;
+	struct smtp* state = ATTACHMENT(key);
 
 	size_t count;
-	uint8_t* ptr;
+	buffer* wb = &state->write_buffer;
 
-	// Generate response
-	ptr = buffer_write_ptr(&state->write_buffer, &count);
-
-	// TODO: Check count with n (min(n,count))
-	strcpy((char*)ptr, "250 Ok\r\n");
-	buffer_write_adv(&state->write_buffer, 8);
-
-	return RESPONSE_WRITE;
-}
-
-static unsigned int
-request_read_posta(struct selector_key* key, struct smtp* state)
-{
-	unsigned int ret = REQUEST_READ;
-	;
-	bool error = false;
-	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
-	if (request_is_done(st, 0)) {
-		if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-			// Procesamiento
-			ret = request_process(state);  // tengo todo completo
-		} else {
-			ret = ERROR;
-		}
-	}
-	return ret;
-}
-
-static unsigned
-request_read(struct selector_key* key)
-{
-	unsigned ret;
-	struct smtp* s = ATTACHMENT(key);
-
-	if (buffer_can_read(&s->read_buffer)) {
-		ret = request_read_posta(key, s);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&s->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
-
-		if (n > 0) {
-			buffer_write_adv(&s->read_buffer, n);
-			ret = request_read_posta(key, s);
-		} else {
-			ret = ERROR;
-		}
-	}
-
-	return ret;
-}
-
-static unsigned
-response_write(struct selector_key* key)
-{
-	unsigned ret = RESPONSE_WRITE;
-
-	size_t count;
-	buffer* wb = &ATTACHMENT(key)->write_buffer;
+	char* greeting = "220 localhost SMTP\r\n";
+	memcpy(&state->raw_buff_write, greeting, strlen(greeting));
+	buffer_write_adv(&state->write_buffer, strlen(greeting));
 
 	uint8_t* ptr = buffer_read_ptr(wb, &count);
 	ssize_t n = send(key->fd, ptr, count, 0);
@@ -223,9 +137,8 @@ response_write(struct selector_key* key)
 	if (n > 0) {
 		buffer_read_adv(wb, n);
 		if (!buffer_can_read(wb)) {
-			// TODO: Ver si voy para data o request
 			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = ATTACHMENT(key)->is_data ? DATA_READ : REQUEST_READ;
+				ret = EHLO_READ;
 			} else {
 				ret = ERROR;
 			}
@@ -237,52 +150,36 @@ response_write(struct selector_key* key)
 	return ret;
 }
 
-static unsigned int
-data_read_posta(struct selector_key* key, struct smtp* state)
+static void
+ehlo_read_init(const unsigned state, struct selector_key* key)
 {
-	unsigned int ret = DATA_READ;
-	bool error = false;
-
-	buffer* b = &state->read_buffer;
-	enum data_state st = state->data_parser.state;
-
-	while (buffer_can_read(b)) {
-		const uint8_t c = buffer_read(b);
-		st = data_parser_feed(&state->data_parser, c);
-		if (data_is_done(st)) {
-			break;
-		}
-	}
-
-	struct selector_key key_file;  // TODO: arreglar esto
-
-	// write to file from buffer if is not empty
-	if (selector_set_interest_key(key, OP_NOOP) == SELECTOR_SUCCESS) {
-		if (selector_set_interest_key(&key_file, OP_WRITE) == SELECTOR_SUCCESS)
-			ret = DATA_WRITE;  // Vuelvo a request_read
-	} else {
-		ret = ERROR;
-	}
-
-	return ret;
+	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+	p->request = &ATTACHMENT(key)->request;
+	request_parser_init(p);
 }
 
 static unsigned
-data_read(struct selector_key* key)
+ehlo_read_process(struct selector_key* key, struct smtp* state)
 {
-	unsigned ret;
-	struct smtp* state = ATTACHMENT(key);
+	unsigned ret = EHLO_READ;
 
-	if (buffer_can_read(&state->read_buffer)) {
-		ret = data_read_posta(key, state);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
+	bool error = false;
+	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
 
-		if (n > 0) {
-			buffer_write_adv(&state->read_buffer, n);
-			ret = data_read_posta(key, state);
+	if (request_is_done(st, 0)) {
+		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+			size_t count;
+			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
+
+			if (strcasecmp(state->request_parser.request->verb, "ehlo") == 0) {
+				ret = EHLO_WRITE;
+				strcpy((char*)ptr, "250-user\r\n250-PIPELINING\r\n250 SIZE 10240000\r\n");
+				buffer_write_adv(&state->write_buffer, 45);
+			} else {
+				ret = EHLO_WRITE;
+				strcpy((char*)ptr, "250 Ok\r\n");
+				buffer_write_adv(&state->write_buffer, 8);
+			}
 		} else {
 			ret = ERROR;
 		}
@@ -292,30 +189,284 @@ data_read(struct selector_key* key)
 }
 
 static unsigned
-data_write(struct selector_key* key)
+ehlo_read(struct selector_key* key)
 {
-	return REQUEST_READ;
+	unsigned ret = EHLO_READ;
+	struct smtp* state = ATTACHMENT(key);
+
+	if (buffer_can_read(&state->read_buffer)) {
+		ret = ehlo_read_process(key, state);
+	} else {
+		size_t count;
+		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+		ssize_t n = recv(key->fd, ptr, count, 0);
+
+		if (n > 0) {
+			buffer_write_adv(&state->read_buffer, n);
+			ret = ehlo_read_process(key, state);
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
 }
+
+static unsigned
+ehlo_write(struct selector_key* key)
+{
+	unsigned ret = EHLO_WRITE;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = EHLO_READ;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
+
+// static void
+// request_read_init(const unsigned st, struct selector_key* key)
+// {
+// 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+// 	p->request = &ATTACHMENT(key)->request;
+// 	request_parser_init(p);
+// }
+//
+// static void
+// request_read_close(const unsigned state, struct selector_key* key)
+// {
+// 	request_close(&ATTACHMENT(key)->request_parser);
+// }
+//
+// static enum smtp_state
+// request_process(struct smtp* state)
+// {
+// 	if (strcasecmp(state->request_parser.request->verb, "data") == 0) {
+// 		state->is_data = true;
+// 		return RESPONSE_WRITE;
+// 	}
+//
+// 	if (strcasecmp(state->request_parser.request->verb, "mail from") == 0) {
+// 		// TODO: Check arg1
+// 		strcpy(state->mailfrom, state->request_parser.request->arg1);
+//
+// 		size_t count;
+// 		uint8_t* ptr;
+//
+// 		// Generate response
+// 		ptr = buffer_write_ptr(&state->write_buffer, &count);
+//
+// 		// TODO: Check count with n (min(n,count))
+// 		strcpy((char*)ptr, "250 Ok\r\n");
+// 		buffer_write_adv(&state->write_buffer, 8);
+//
+// 		return RESPONSE_WRITE;
+// 	}
+//
+// 	if (strcasecmp(state->request_parser.request->verb, "ehlo") == 0) {
+// 		/*
+// 		 *  250-emilio
+// 		    250-PIPELINING
+// 		    250 SIZE 10240000
+// 		 * */
+// 		return RESPONSE_WRITE;
+// 	}
+//
+// 	size_t count;
+// 	uint8_t* ptr;
+//
+// 	// Generate response
+// 	ptr = buffer_write_ptr(&state->write_buffer, &count);
+//
+// 	// TODO: Check count with n (min(n,count))
+// 	strcpy((char*)ptr, "250 Ok\r\n");
+// 	buffer_write_adv(&state->write_buffer, 8);
+//
+// 	return RESPONSE_WRITE;
+// }
+//
+// static unsigned int
+// request_read_posta(struct selector_key* key, struct smtp* state)
+// {
+// 	unsigned int ret = REQUEST_READ;
+// 	;
+// 	bool error = false;
+// 	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+// 	if (request_is_done(st, 0)) {
+// 		if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+// 			// Procesamiento
+// 			ret = request_process(state);  // tengo todo completo
+// 		} else {
+// 			ret = ERROR;
+// 		}
+// 	}
+// 	return ret;
+// }
+//
+// static unsigned
+// request_read(struct selector_key* key)
+// {
+// 	unsigned ret;
+// 	struct smtp* s = ATTACHMENT(key);
+//
+// 	if (buffer_can_read(&s->read_buffer)) {
+// 		ret = request_read_posta(key, s);
+// 	} else {
+// 		size_t count;
+// 		uint8_t* ptr = buffer_write_ptr(&s->read_buffer, &count);
+// 		ssize_t n = recv(key->fd, ptr, count, 0);
+//
+// 		if (n > 0) {
+// 			buffer_write_adv(&s->read_buffer, n);
+// 			ret = request_read_posta(key, s);
+// 		} else {
+// 			ret = ERROR;
+// 		}
+// 	}
+//
+// 	return ret;
+// }
+//
+// static unsigned
+// response_write(struct selector_key* key)
+// {
+// 	unsigned ret = RESPONSE_WRITE;
+//
+// 	size_t count;
+// 	buffer* wb = &ATTACHMENT(key)->write_buffer;
+//
+// 	uint8_t* ptr = buffer_read_ptr(wb, &count);
+// 	ssize_t n = send(key->fd, ptr, count, 0);
+//
+// 	if (n > 0) {
+// 		buffer_read_adv(wb, n);
+// 		if (!buffer_can_read(wb)) {
+// 			// TODO: Ver si voy para data o request
+// 			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+// 				ret = ATTACHMENT(key)->is_data ? DATA_READ : REQUEST_READ;
+// 			} else {
+// 				ret = ERROR;
+// 			}
+// 		}
+// 	} else {
+// 		ret = ERROR;
+// 	}
+//
+// 	return ret;
+// }
+//
+// static unsigned int
+// data_read_posta(struct selector_key* key, struct smtp* state)
+// {
+// 	unsigned int ret = DATA_READ;
+// 	bool error = false;
+//
+// 	buffer* b = &state->read_buffer;
+// 	enum data_state st = state->data_parser.state;
+//
+// 	while (buffer_can_read(b)) {
+// 		const uint8_t c = buffer_read(b);
+// 		st = data_parser_feed(&state->data_parser, c);
+// 		if (data_is_done(st)) {
+// 			break;
+// 		}
+// 	}
+//
+// 	struct selector_key key_file;  // TODO: arreglar esto
+//
+// 	// write to file from buffer if is not empty
+// 	if (selector_set_interest_key(key, OP_NOOP) == SELECTOR_SUCCESS) {
+// 		if (selector_set_interest_key(&key_file, OP_WRITE) == SELECTOR_SUCCESS)
+// 			ret = DATA_WRITE;  // Vuelvo a request_read
+// 	} else {
+// 		ret = ERROR;
+// 	}
+//
+// 	return ret;
+// }
+//
+// static unsigned
+// data_read(struct selector_key* key)
+// {
+// 	unsigned ret;
+// 	struct smtp* state = ATTACHMENT(key);
+//
+// 	if (buffer_can_read(&state->read_buffer)) {
+// 		ret = data_read_posta(key, state);
+// 	} else {
+// 		size_t count;
+// 		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+// 		ssize_t n = recv(key->fd, ptr, count, 0);
+//
+// 		if (n > 0) {
+// 			buffer_write_adv(&state->read_buffer, n);
+// 			ret = data_read_posta(key, state);
+// 		} else {
+// 			ret = ERROR;
+// 		}
+// 	}
+//
+// 	return ret;
+// }
+//
+// static unsigned
+// data_write(struct selector_key* key)
+// {
+// 	return REQUEST_READ;
+// }
 
 static const struct state_definition client_statbl[] = {
 	{
-	    .state = RESPONSE_WRITE,
-	    .on_write_ready = response_write,
+	    .state = GREETING_WRITE,
+	    .on_write_ready = greeting_write,
 	},
 	{
-	    .state = REQUEST_READ,
-	    .on_arrival = request_read_init,
-	    .on_departure = request_read_close,
-	    .on_read_ready = request_read,
+	    .state = EHLO_READ,
+		.on_arrival = ehlo_read_init,
+	    .on_read_ready = ehlo_read,
 	},
 	{
-	    .state = DATA_READ,
-	    .on_read_ready = data_read,
+	    .state = EHLO_WRITE,
+	    .on_write_ready = ehlo_write,
 	},
 	{
-	    .state = DATA_WRITE,
-	    .on_read_ready = data_write,
+	    .state = MAIL_FROM_READ,
+	    .on_read_ready = ehlo_read,
 	},
+	// {
+	//     .state = RESPONSE_WRITE,
+	//     .on_write_ready = response_write,
+	// },
+	// {
+	//     .state = REQUEST_READ,
+	//     .on_arrival = request_read_init,
+	//     .on_departure = request_read_close,
+	//     .on_read_ready = request_read,
+	// },
+	// {
+	//     .state = DATA_READ,
+	//     .on_read_ready = data_read,
+	// },
+	// {
+	//     .state = DATA_WRITE,
+	//     .on_read_ready = data_write,
+	// },
 	{
 	    .state = DONE,
 	},
@@ -361,11 +512,11 @@ smtp_write(struct selector_key* key)
 
 	if (st == ERROR || st == DONE) {
 		smtp_done(key);
-	} else if (st == REQUEST_READ || st == DATA_READ) {
-		buffer* rb = &ATTACHMENT(key)->read_buffer;
-		if (buffer_can_read(rb))
-			smtp_read(key);
-	}
+	} /*  else if (st == REQUEST_READ || st == DATA_READ) {
+	     buffer* rb = &ATTACHMENT(key)->read_buffer;
+	     if (buffer_can_read(rb))
+	         smtp_read(key);
+	 } */
 }
 
 static void
@@ -414,7 +565,7 @@ smtp_passive_accept(struct selector_key* key)
 	memcpy(&state->client_addr, &client_addr, client_addr_len);
 	state->client_addr_len = client_addr_len;
 
-	state->stm.initial = RESPONSE_WRITE;
+	state->stm.initial = GREETING_WRITE;
 	state->stm.max_state = ERROR;
 	state->stm.states = client_statbl;
 	stm_init(&state->stm);
@@ -422,9 +573,9 @@ smtp_passive_accept(struct selector_key* key)
 	buffer_init(&state->read_buffer, N(state->raw_buff_read), state->raw_buff_read);
 	buffer_init(&state->write_buffer, N(state->raw_buff_write), state->raw_buff_write);
 
-	char* hello = "220 localhost SMTP\n";
+	/* char* hello = "220 localhost SMTP\n";
 	memcpy(&state->raw_buff_write, hello, strlen(hello));
-	buffer_write_adv(&state->write_buffer, strlen(hello));
+	buffer_write_adv(&state->write_buffer, strlen(hello)); */
 
 	state->request_parser.request = &state->request;
 	request_parser_init(&state->request_parser);
