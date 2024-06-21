@@ -68,6 +68,20 @@ struct smtp
 	buffer read_buffer, write_buffer;
 };
 
+static void
+request_read_init(const unsigned st, struct selector_key* key)
+{
+	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+	p->request = &ATTACHMENT(key)->request;
+	request_parser_init(p);
+}
+
+static void
+request_read_close(const unsigned state, struct selector_key* key)
+{
+	request_close(&ATTACHMENT(key)->request_parser);
+}
+
 static unsigned
 request_read(struct selector_key* key)
 {
@@ -81,16 +95,21 @@ request_read(struct selector_key* key)
 	if (n > 0) {
 		buffer_write_adv(&s->read_buffer, n);
 
-		// Procesamiento
-		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
-			ret = RESPONSE_WRITE;
-			ptr = buffer_write_ptr(&s->write_buffer, &count);
+		bool error = false;
+		int st = request_consume(&s->read_buffer, &s->request_parser, &error);
 
-			// TODO: check count with n (min(n, count))
-			memcpy(ptr, "200\r\n", 5);
-			buffer_write_adv(&s->write_buffer, 5);
-		} else {
-			ret = ERROR;
+		if (request_is_done(st, 0)) {
+			if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+				ret = RESPONSE_WRITE;
+				ptr = buffer_write_ptr(&s->write_buffer, &count);
+
+				// TODO: check count with n (min(n, count))
+
+				memcpy(ptr, "200\r\n", 5);
+				buffer_write_adv(&s->write_buffer, n);
+			} else {
+				ret = ERROR;
+			}
 		}
 	} else {
 		ret = ERROR;
@@ -133,6 +152,8 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = REQUEST_READ,
+	    .on_arrival = request_read_init,
+	    .on_departure = request_read_close,
 	    .on_read_ready = request_read,
 	},
 	{
@@ -236,8 +257,11 @@ smtp_passive_accept(struct selector_key* key)
 	buffer_init(&state->read_buffer, N(state->raw_buff_read), state->raw_buff_read);
 	buffer_init(&state->write_buffer, N(state->raw_buff_write), state->raw_buff_write);
 
-	memcpy(&state->raw_buff_write, "SEXO ANAL\n", 5);
+	memcpy(&state->raw_buff_write, "HELLO\n", 5);
 	buffer_write_adv(&state->write_buffer, 5);
+
+	state->request_parser.request = &state->request;
+	request_parser_init(&state->request_parser);
 
 	if (selector_register(key->s, client, &smtp_handler, OP_WRITE, state) != SELECTOR_SUCCESS)
 		goto fail;

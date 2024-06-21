@@ -1,34 +1,32 @@
-#include <stdlib.h>
-#include <string.h>
-#include <check.h>
-
 #include "request.h"
 #include "tests.h"
 
-#define FIXBUF(b, data) buffer_init(&(b), N(data), (data)); \
-                        buffer_write_adv(&(b), N(data))
+#include <check.h>
+#include <stdlib.h>
 
-START_TEST (test_request_unsuppored_version) {
-    struct request request;
-    struct request_parser parser = {
-        .request = &request,
-    };
-    request_parser_init(&parser);
-    uint8_t data[] = {
-        0x04,
-    };
-    buffer b; FIXBUF(b, data);
-    bool errored = false;
-    enum request_state st = request_consume(&b, &parser, &errored);
+#define FIXBUF(b, data)                 \
+	buffer_init(&(b), N(data), (data)); \
+	buffer_write_adv(&(b), N(data))
 
-    ck_assert_uint_eq(true, errored);
-    ck_assert_uint_eq(request_error_unsupported_version,     st);
+START_TEST(test_request_unsuppored_version)
+{
+	struct request request;
+	struct request_parser parser = {
+		.request = &request,
+	};
+	request_parser_init(&parser);
+	uint8_t data[] = { 'd', 'a', 't', 'a', '\r', '\n' };
+	buffer b;
+	FIXBUF(b, data);
+	bool errored = false;
+	enum request_state st = request_consume(&b, &parser, &errored);
 
+	ck_assert_uint_eq(false, errored);
+	ck_assert_uint_eq(request_done, st);
 }
 END_TEST
 
-
-START_TEST (test_request_connect_domain) {
+/*START_TEST (test_request_connect_domain) {
     struct request request;
     struct request_parser parser = {
         .request = &request,
@@ -140,40 +138,41 @@ START_TEST (test_request_connect_multiple_messages) {
     ck_assert_uint_eq(htons(80),                 request.dest_port);
 }
 END_TEST
+*/
+Suite*
+request_suite(void)
+{
+	Suite* s;
+	TCase* tc;
 
-Suite *
-request_suite(void) {
-    Suite *s;
-    TCase *tc;
+	s = suite_create("socks");
 
-    s = suite_create("socks");
+	// Core test case
+	tc = tcase_create("request");
 
-    /* Core test case */
-    tc = tcase_create("request");
+	tcase_add_test(tc, test_request_unsuppored_version);
+	// tcase_add_test(tc, test_request_connect_domain);
+	// tcase_add_test(tc, test_request_connect_ipv4);
+	// tcase_add_test(tc, test_request_connect_ipv6);
+	// tcase_add_test(tc, test_request_connect_multiple_messages);
 
-    tcase_add_test(tc, test_request_unsuppored_version);
-    tcase_add_test(tc, test_request_connect_domain);
-    tcase_add_test(tc, test_request_connect_ipv4);
-    tcase_add_test(tc, test_request_connect_ipv6);
-    tcase_add_test(tc, test_request_connect_multiple_messages);
+	suite_add_tcase(s, tc);
 
-    suite_add_tcase(s, tc);
-
-    return s;
+	return s;
 }
 
 int
-main(void) {
-    int number_failed;
-    Suite *s;
-    SRunner *sr;
+main(void)
+{
+	int number_failed;
+	Suite* s;
+	SRunner* sr;
 
-    s = request_suite();
-    sr = srunner_create(s);
+	s = request_suite();
+	sr = srunner_create(s);
 
-    srunner_run_all(sr, CK_NORMAL);
-    number_failed = srunner_ntests_failed(sr);
-    srunner_free(sr);
-    return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+	srunner_run_all(sr, CK_NORMAL);
+	number_failed = srunner_ntests_failed(sr);
+	srunner_free(sr);
+	return (number_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
-

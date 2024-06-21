@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 // asi se puede probar las funciones internas
-#include "buffer.c"
+#include "../src/buffer.c"
 
 #define N(x) (sizeof(x) / sizeof((x)[0]))
 

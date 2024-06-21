@@ -8,10 +8,19 @@ BIN=build/smtpd
 
 all: dir $(BIN)
 
+test: dir build/request_test
+	build/request_test
+
 $(BIN): $(OBJ)
 	$(CC) -o $(BIN) $^ $(LDFLAGS)
 
+build/request_test: test/request_test.o src/request.o src/buffer.o
+	$(CC) -o $@ $^ $(LDFLAGS) -pthread -lcheck_pic -pthread -lrt -lm -lsubunit
+
 build/%.o: src/%.c
+	$(CC) -o $@ -c $< $(CFLAGS)
+
+build/%.o: test/%.c
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 dir:
