@@ -236,7 +236,7 @@ smtp_passive_accept(struct selector_key* key)
 	buffer_init(&state->read_buffer, N(state->raw_buff_read), state->raw_buff_read);
 	buffer_init(&state->write_buffer, N(state->raw_buff_write), state->raw_buff_write);
 
-	memcpy(&state->raw_buff_write, "Hola\n", 5);
+	memcpy(&state->raw_buff_write, "SEXO ANAL\n", 5);
 	buffer_write_adv(&state->write_buffer, 5);
 
 	if (selector_register(key->s, client, &smtp_handler, OP_WRITE, state) != SELECTOR_SUCCESS)
