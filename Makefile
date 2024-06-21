@@ -1,4 +1,4 @@
-CFLAGS=-std=c11 -Iinclude -pedantic -pedantic-errors -Og -Wall -Werror -D_POSIX_C_SOURCE=200112L -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+CFLAGS=-std=c11 -Iinclude -pedantic -pedantic-errors -Og -g -Wall -Werror -D_POSIX_C_SOURCE=200112L -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 # CFLAGS+=-Wextra
 LDFLAGS=-fsanitize=address
 

@@ -87,7 +87,7 @@ request_read(struct selector_key* key)
 			ptr = buffer_write_ptr(&s->write_buffer, &count);
 
 			// TODO: check count with n (min(n, count))
-			memcpy(ptr, "200\n", 5);
+			memcpy(ptr, "200\r\n", 5);
 			buffer_write_adv(&s->write_buffer, 5);
 		} else {
 			ret = ERROR;
@@ -136,10 +136,10 @@ static const struct state_definition client_statbl[] = {
 	    .on_read_ready = request_read,
 	},
 	{
-	    .state = ERROR,
+	    .state = DONE,
 	},
 	{
-	    .state = DONE,
+	    .state = ERROR,
 	},
 };
 
@@ -239,7 +239,7 @@ smtp_passive_accept(struct selector_key* key)
 	memcpy(&state->raw_buff_write, "Hola\n", 5);
 	buffer_write_adv(&state->write_buffer, 5);
 
-	if (selector_register(key->s, client, &smtp_handler, OP_READ, state) != SELECTOR_SUCCESS)
+	if (selector_register(key->s, client, &smtp_handler, OP_WRITE, state) != SELECTOR_SUCCESS)
 		goto fail;
 	return;
 
