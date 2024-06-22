@@ -29,10 +29,12 @@ enum smtp_state
 	EHLO_WRITE,
 	MAIL_FROM_READ,
 	MAIL_FROM_WRITE,
-	// RCPT_TO_READ,
-	// RCPT_TO_WRITE,
-	// DATA_READ,
-	// DATA_WRITE,
+	RCPT_TO_READ,
+	RCPT_TO_WRITE,
+	DATA_READ,
+	DATA_WRITE,
+	MAIL_INFO_READ,
+	MAIL_INFO_WRITE,
 	/* MAIL_FROM_RESPONSE_WRITE,
 	RCPT_TO_READ,
 	RCPT_TO_RESPONSE_WRITE,
@@ -260,14 +262,19 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
+			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "MAIL FROM: <mail@mail.com>"
 			if (strcasecmp(state->request_parser.request->verb, "mail from:") == 0) {
 				ret = MAIL_FROM_WRITE;
 				strcpy((char*)ptr, "250 Mail from received\r\n");
-				buffer_write_adv(&state->write_buffer, 45);
+				buffer_write_adv(&state->write_buffer, 24);
+			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				ret = DONE;
+				strcpy((char*)ptr, "221 Bye\r\n");
+				buffer_write_adv(&state->write_buffer, 9);
 			} else {
 				ret = MAIL_FROM_WRITE;
 				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 8);
+				buffer_write_adv(&state->write_buffer, 18);
 			}
 		} else {
 			ret = ERROR;
@@ -317,7 +324,7 @@ mail_from_write(struct selector_key* key)
 		buffer_read_adv(wb, n);
 		if (!buffer_can_read(wb)) {
 			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = EHLO_READ;
+				ret = RCPT_TO_READ;
 			} else {
 				ret = ERROR;
 			}
@@ -329,196 +336,264 @@ mail_from_write(struct selector_key* key)
 	return ret;
 }
 
-// static void
-// request_read_init(const unsigned st, struct selector_key* key)
-// {
-// 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-// 	p->request = &ATTACHMENT(key)->request;
-// 	request_parser_init(p);
-// }
-//
-// static void
-// request_read_close(const unsigned state, struct selector_key* key)
-// {
-// 	request_close(&ATTACHMENT(key)->request_parser);
-// }
-//
-// static enum smtp_state
-// request_process(struct smtp* state)
-// {
-// 	if (strcasecmp(state->request_parser.request->verb, "data") == 0) {
-// 		state->is_data = true;
-// 		return RESPONSE_WRITE;
-// 	}
-//
-// 	if (strcasecmp(state->request_parser.request->verb, "mail from") == 0) {
-// 		// TODO: Check arg1
-// 		strcpy(state->mailfrom, state->request_parser.request->arg1);
-//
-// 		size_t count;
-// 		uint8_t* ptr;
-//
-// 		// Generate response
-// 		ptr = buffer_write_ptr(&state->write_buffer, &count);
-//
-// 		// TODO: Check count with n (min(n,count))
-// 		strcpy((char*)ptr, "250 Ok\r\n");
-// 		buffer_write_adv(&state->write_buffer, 8);
-//
-// 		return RESPONSE_WRITE;
-// 	}
-//
-// 	if (strcasecmp(state->request_parser.request->verb, "ehlo") == 0) {
-// 		/*
-// 		 *  250-emilio
-// 		    250-PIPELINING
-// 		    250 SIZE 10240000
-// 		 * */
-// 		return RESPONSE_WRITE;
-// 	}
-//
-// 	size_t count;
-// 	uint8_t* ptr;
-//
-// 	// Generate response
-// 	ptr = buffer_write_ptr(&state->write_buffer, &count);
-//
-// 	// TODO: Check count with n (min(n,count))
-// 	strcpy((char*)ptr, "250 Ok\r\n");
-// 	buffer_write_adv(&state->write_buffer, 8);
-//
-// 	return RESPONSE_WRITE;
-// }
-//
-// static unsigned int
-// request_read_posta(struct selector_key* key, struct smtp* state)
-// {
-// 	unsigned int ret = REQUEST_READ;
-// 	;
-// 	bool error = false;
-// 	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
-// 	if (request_is_done(st, 0)) {
-// 		if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
-// 			// Procesamiento
-// 			ret = request_process(state);  // tengo todo completo
-// 		} else {
-// 			ret = ERROR;
-// 		}
-// 	}
-// 	return ret;
-// }
-//
-// static unsigned
-// request_read(struct selector_key* key)
-// {
-// 	unsigned ret;
-// 	struct smtp* s = ATTACHMENT(key);
-//
-// 	if (buffer_can_read(&s->read_buffer)) {
-// 		ret = request_read_posta(key, s);
-// 	} else {
-// 		size_t count;
-// 		uint8_t* ptr = buffer_write_ptr(&s->read_buffer, &count);
-// 		ssize_t n = recv(key->fd, ptr, count, 0);
-//
-// 		if (n > 0) {
-// 			buffer_write_adv(&s->read_buffer, n);
-// 			ret = request_read_posta(key, s);
-// 		} else {
-// 			ret = ERROR;
-// 		}
-// 	}
-//
-// 	return ret;
-// }
-//
-// static unsigned
-// response_write(struct selector_key* key)
-// {
-// 	unsigned ret = RESPONSE_WRITE;
-//
-// 	size_t count;
-// 	buffer* wb = &ATTACHMENT(key)->write_buffer;
-//
-// 	uint8_t* ptr = buffer_read_ptr(wb, &count);
-// 	ssize_t n = send(key->fd, ptr, count, 0);
-//
-// 	if (n > 0) {
-// 		buffer_read_adv(wb, n);
-// 		if (!buffer_can_read(wb)) {
-// 			// TODO: Ver si voy para data o request
-// 			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-// 				ret = ATTACHMENT(key)->is_data ? DATA_READ : REQUEST_READ;
-// 			} else {
-// 				ret = ERROR;
-// 			}
-// 		}
-// 	} else {
-// 		ret = ERROR;
-// 	}
-//
-// 	return ret;
-// }
-//
-// static unsigned int
-// data_read_posta(struct selector_key* key, struct smtp* state)
-// {
-// 	unsigned int ret = DATA_READ;
-// 	bool error = false;
-//
-// 	buffer* b = &state->read_buffer;
-// 	enum data_state st = state->data_parser.state;
-//
-// 	while (buffer_can_read(b)) {
-// 		const uint8_t c = buffer_read(b);
-// 		st = data_parser_feed(&state->data_parser, c);
-// 		if (data_is_done(st)) {
-// 			break;
-// 		}
-// 	}
-//
-// 	struct selector_key key_file;  // TODO: arreglar esto
-//
-// 	// write to file from buffer if is not empty
-// 	if (selector_set_interest_key(key, OP_NOOP) == SELECTOR_SUCCESS) {
-// 		if (selector_set_interest_key(&key_file, OP_WRITE) == SELECTOR_SUCCESS)
-// 			ret = DATA_WRITE;  // Vuelvo a request_read
-// 	} else {
-// 		ret = ERROR;
-// 	}
-//
-// 	return ret;
-// }
-//
-// static unsigned
-// data_read(struct selector_key* key)
-// {
-// 	unsigned ret;
-// 	struct smtp* state = ATTACHMENT(key);
-//
-// 	if (buffer_can_read(&state->read_buffer)) {
-// 		ret = data_read_posta(key, state);
-// 	} else {
-// 		size_t count;
-// 		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-// 		ssize_t n = recv(key->fd, ptr, count, 0);
-//
-// 		if (n > 0) {
-// 			buffer_write_adv(&state->read_buffer, n);
-// 			ret = data_read_posta(key, state);
-// 		} else {
-// 			ret = ERROR;
-// 		}
-// 	}
-//
-// 	return ret;
-// }
-//
-// static unsigned
-// data_write(struct selector_key* key)
-// {
-// 	return REQUEST_READ;
-// }
+static unsigned
+rcpt_to_read_process(struct selector_key* key, struct smtp* state)
+{
+	unsigned ret = RCPT_TO_READ;
+
+	bool error = false;
+	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+
+	if (request_is_done(st, 0)) {
+		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+			size_t count;
+			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
+
+			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "RCPT TP: <mail@mail.com>"
+			if (strcasecmp(state->request_parser.request->verb, "rcpt to:") == 0) {
+				ret = RCPT_TO_WRITE;
+				strcpy((char*)ptr, "250 Rcpt to received\r\n");
+				buffer_write_adv(&state->write_buffer, 22);
+			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				ret = DONE;
+				// LIMPIAR EL MAIL FROM
+				strcpy((char*)ptr, "221 Bye\r\n");
+				buffer_write_adv(&state->write_buffer, 9);
+			} else {
+				ret = RCPT_TO_WRITE;
+				strcpy((char*)ptr, "500 Syntax error\r\n");
+				buffer_write_adv(&state->write_buffer, 18);
+			}
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+rcpt_to_read(struct selector_key* key)
+{
+	unsigned ret = RCPT_TO_READ;
+	struct smtp* state = ATTACHMENT(key);
+
+	if (buffer_can_read(&state->read_buffer)) {
+		ret = rcpt_to_read_process(key, state);
+	} else {
+		size_t count;
+		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+		ssize_t n = recv(key->fd, ptr, count, 0);
+
+		if (n > 0) {
+			buffer_write_adv(&state->read_buffer, n);
+			ret = rcpt_to_read_process(key, state);
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+rcpt_to_write(struct selector_key* key)
+{
+	unsigned ret = RCPT_TO_WRITE;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = DATA_READ;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
+
+static unsigned
+data_read_process(struct selector_key* key, struct smtp* state)
+{
+	unsigned ret = DATA_READ;
+
+	bool error = false;
+	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+
+	if (request_is_done(st, 0)) {
+		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+			size_t count;
+			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
+
+			// TODO: PARSER PARA FIJARSE SI TERMINA EN <CR><LF>.<CR><LF> Y AGARRAR LA INFO DEL MAIL
+			if (strcasecmp(state->request_parser.request->verb, "data") == 0) {
+				ret = DATA_WRITE;
+				strcpy((char*)ptr, "354 End data with <CR><LF>.<CR><LF>\r\n");
+				buffer_write_adv(&state->write_buffer, 37);
+			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				ret = DONE;
+				// LIMPIAR EL MAIL FROM
+				// LIMPIAR EL RCPT TO
+				strcpy((char*)ptr, "221 Bye\r\n");
+				buffer_write_adv(&state->write_buffer, 9);
+			} else {
+				ret = DATA_WRITE;
+				strcpy((char*)ptr, "500 Syntax error\r\n");
+				buffer_write_adv(&state->write_buffer, 18);
+			}
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+data_read(struct selector_key* key)
+{
+	unsigned ret = DATA_READ;
+	struct smtp* state = ATTACHMENT(key);
+
+	if (buffer_can_read(&state->read_buffer)) {
+		ret = data_read_process(key, state);
+	} else {
+		size_t count;
+		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+		ssize_t n = recv(key->fd, ptr, count, 0);
+
+		if (n > 0) {
+			buffer_write_adv(&state->read_buffer, n);
+			ret = data_read_process(key, state);
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+data_write(struct selector_key* key)
+{
+	unsigned ret = DATA_WRITE;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = MAIL_INFO_READ;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
+
+static unsigned
+mail_info_read_process(struct selector_key* key, struct smtp* state)
+{
+	unsigned ret = MAIL_INFO_READ;
+
+	bool error = false;
+	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+
+	if (request_is_done(st, 0)) {
+		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+			size_t count;
+			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
+
+			if (strcasecmp(state->request_parser.request->verb, "\r\n.\r\n") == 0) {
+				ret = MAIL_FROM_WRITE;
+				strcpy((char*)ptr, "250 Ok: queued");
+				buffer_write_adv(&state->write_buffer, 12);
+			} else {
+				ret = MAIL_FROM_WRITE;
+				strcpy((char*)ptr, "500 Syntax error\r\n");
+				buffer_write_adv(&state->write_buffer, 18);
+			}
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+mail_info_read(struct selector_key* key)
+{
+	unsigned ret = MAIL_INFO_READ;
+	struct smtp* state = ATTACHMENT(key);
+
+	if (buffer_can_read(&state->read_buffer)) {
+		ret = mail_info_read_process(key, state);
+	} else {
+		size_t count;
+		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+		ssize_t n = recv(key->fd, ptr, count, 0);
+
+		if (n > 0) {
+			buffer_write_adv(&state->read_buffer, n);
+			ret = mail_info_read_process(key, state);
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+mail_info_write(struct selector_key* key)
+{
+	unsigned ret = MAIL_INFO_WRITE;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = MAIL_FROM_READ;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
 
 static const struct state_definition client_statbl[] = {
 	{
@@ -543,42 +618,33 @@ static const struct state_definition client_statbl[] = {
 	    .state = MAIL_FROM_WRITE,
 	    .on_write_ready = mail_from_write,
 	},
-	// {
-	//     .state = RCPT_TO_READ,
-	//     .on_arrival = read_init,
-	//     .on_read_ready = rcpt_to_read,
-	// },
-	// {
-	//     .state = RCPT_TO_WRITE,
-	//     .on_write_ready = rcpt_to_write,
-	// },
-	// {
-	//     .state = DATA_READ,
-	//     .on_arrival = read_init,
-	//     .on_read_ready = data_read,
-	// },
-	// {
-	//     .state = DATA_WRITE,
-	//     .on_write_ready = data_write,
-	// },
-	// {
-	//     .state = RESPONSE_WRITE,
-	//     .on_write_ready = response_write,
-	// },
-	// {
-	//     .state = REQUEST_READ,
-	//     .on_arrival = request_read_init,
-	//     .on_departure = request_read_close,
-	//     .on_read_ready = request_read,
-	// },
-	// {
-	//     .state = DATA_READ,
-	//     .on_read_ready = data_read,
-	// },
-	// {
-	//     .state = DATA_WRITE,
-	//     .on_read_ready = data_write,
-	// },
+	{
+	    .state = RCPT_TO_READ,
+	    .on_arrival = read_init,
+	    .on_read_ready = rcpt_to_read,
+	},
+	{
+	    .state = RCPT_TO_WRITE,
+	    .on_write_ready = rcpt_to_write,
+	},
+	{
+	    .state = DATA_READ,
+	    .on_arrival = read_init,
+	    .on_read_ready = data_read,
+	},
+	{
+	    .state = DATA_WRITE,
+	    .on_write_ready = data_write,
+	},
+	{
+	    .state = MAIL_INFO_READ,
+	    .on_arrival = read_init,
+	    .on_read_ready = mail_info_read,
+	},
+	{
+	    .state = MAIL_INFO_WRITE,
+	    .on_write_ready = mail_info_write,
+	},
 	{
 	    .state = DONE,
 	},
