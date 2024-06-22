@@ -27,8 +27,12 @@ enum smtp_state
 	GREETING_WRITE,
 	EHLO_READ,
 	EHLO_WRITE,
-
 	MAIL_FROM_READ,
+	MAIL_FROM_WRITE,
+	RCPT_TO_READ,
+	RCPT_TO_WRITE,
+	DATA_READ,
+	DATA_WRITE,
 	/* MAIL_FROM_RESPONSE_WRITE,
 	RCPT_TO_READ,
 	RCPT_TO_RESPONSE_WRITE,
@@ -118,6 +122,9 @@ struct status
 
 struct status global_status = { 0 };
 
+static int historic_users = 0;
+static int current_users = 0;
+
 static unsigned
 greeting_write(struct selector_key* key)
 {
@@ -151,7 +158,7 @@ greeting_write(struct selector_key* key)
 }
 
 static void
-ehlo_read_init(const unsigned state, struct selector_key* key)
+read_init(const unsigned state, struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
 	p->request = &ATTACHMENT(key)->request;
@@ -173,8 +180,8 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 
 			if (strcasecmp(state->request_parser.request->verb, "ehlo") == 0) {
 				ret = EHLO_WRITE;
-				strcpy((char*)ptr, "250-user\r\n250-PIPELINING\r\n250 SIZE 10240000\r\n");
-				buffer_write_adv(&state->write_buffer, 45);
+				strcpy((char*)ptr, "250 EHLO received\r\n");
+				buffer_write_adv(&state->write_buffer, 19);
 			} else {
 				ret = EHLO_WRITE;
 				strcpy((char*)ptr, "250 Ok\r\n");
@@ -228,7 +235,89 @@ ehlo_write(struct selector_key* key)
 		buffer_read_adv(wb, n);
 		if (!buffer_can_read(wb)) {
 			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = EHLO_READ;
+				ret = MAIL_FROM_READ;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
+
+static unsigned
+mail_from_read_process(struct selector_key* key, struct smtp* state)
+{
+	unsigned ret = MAIL_FROM_READ;
+
+	bool error = false;
+	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+
+	if (request_is_done(st, 0)) {
+		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+			size_t count;
+			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
+
+			if (strcasecmp(state->request_parser.request->verb, "mail from:") == 0) {
+				ret = MAIL_FROM_WRITE;
+				strcpy((char*)ptr, "250 Mail from received\r\n");
+				buffer_write_adv(&state->write_buffer, 45);
+			} else {
+				ret = MAIL_FROM_WRITE;
+				strcpy((char*)ptr, "500 Syntax error\r\n");
+				buffer_write_adv(&state->write_buffer, 8);
+			}
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+mail_from_read(struct selector_key* key)
+{
+	unsigned ret = MAIL_FROM_READ;
+	struct smtp* state = ATTACHMENT(key);
+
+	if (buffer_can_read(&state->read_buffer)) {
+		ret = mail_from_read_process(key, state);
+	} else {
+		size_t count;
+		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+		ssize_t n = recv(key->fd, ptr, count, 0);
+
+		if (n > 0) {
+			buffer_write_adv(&state->read_buffer, n);
+			ret = mail_from_read_process(key, state);
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+mail_from_write(struct selector_key* key)
+{
+	unsigned ret = MAIL_FROM_WRITE;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = RCPT_TO_READ;
 			} else {
 				ret = ERROR;
 			}
@@ -438,7 +527,7 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = EHLO_READ,
-		.on_arrival = ehlo_read_init,
+	    .on_arrival = read_init,
 	    .on_read_ready = ehlo_read,
 	},
 	{
@@ -447,8 +536,31 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = MAIL_FROM_READ,
-	    .on_read_ready = ehlo_read,
+	    .on_arrival = read_init,
+	    .on_read_ready = mail_from_read,
 	},
+	{
+	    .state = MAIL_FROM_WRITE,
+	    .on_write_ready = mail_from_write,
+	},
+	// {
+	//     .state = RCPT_TO_READ,
+	//     .on_arrival = read_init,
+	//     .on_read_ready = rcpt_to_read,
+	// },
+	// {
+	//     .state = RCPT_TO_WRITE,
+	//     .on_write_ready = rcpt_to_write,
+	// },
+	// {
+	//     .state = DATA_READ,
+	//     .on_arrival = read_init,
+	//     .on_read_ready = data_read,
+	// },
+	// {
+	//     .state = DATA_WRITE,
+	//     .on_write_ready = data_write,
+	// },
 	// {
 	//     .state = RESPONSE_WRITE,
 	//     .on_write_ready = response_write,
@@ -538,6 +650,9 @@ smtp_done(struct selector_key* key)
 		if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS)
 			abort();
 		close(key->fd);
+		fprintf(stdout, "User diconnected\n");
+		fprintf(stdout, "Current users: %d\n", --current_users);
+		fprintf(stdout, "Historic users: %d\n\n", historic_users);
 	}
 }
 
@@ -576,6 +691,10 @@ smtp_passive_accept(struct selector_key* key)
 	/* char* hello = "220 localhost SMTP\n";
 	memcpy(&state->raw_buff_write, hello, strlen(hello));
 	buffer_write_adv(&state->write_buffer, strlen(hello)); */
+
+	fprintf(stdout, "New user connected\n");
+	fprintf(stdout, "Current users: %d\n", ++current_users);
+	fprintf(stdout, "Historic users: %d\n\n", ++historic_users);
 
 	state->request_parser.request = &state->request;
 	request_parser_init(&state->request_parser);
