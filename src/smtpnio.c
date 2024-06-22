@@ -17,7 +17,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define N(x) (sizeof(x) / sizeof((x)[0]))
+#define N(x)      (sizeof(x) / sizeof((x)[0]))
+#define MAX_USERS 500
 
 /** obtiene el struct (smtp *) desde la llave de selección  */
 #define ATTACHMENT(key) ((struct smtp*)(key)->data)
@@ -25,6 +26,8 @@
 enum smtp_state
 {
 	GREETING_WRITE,
+	FAILED_CONNECTION_READ,
+	FAILED_CONNECTION_WRITE,
 	EHLO_READ,
 	EHLO_WRITE,
 	MAIL_FROM_READ,
@@ -35,66 +38,13 @@ enum smtp_state
 	DATA_WRITE,
 	MAIL_INFO_READ,
 	MAIL_INFO_WRITE,
-	/* MAIL_FROM_RESPONSE_WRITE,
-	RCPT_TO_READ,
-	RCPT_TO_RESPONSE_WRITE,
-	DATA_READ,
-	DATA_RESPONSE_WRITE, */
-
-	/**
-	 * enviar mensaje de `HELLO` al cliente
-	 *
-	 * Intereses:
-	 *  - OP_WRITE sobre client_fd
-	 *
-	 * Transiciones:
-	 *  - RESPONSE_WRITE  mientras queden bytes por enviar
-	 *  - REQUEST_READ    cuando se enviaron todos los bytes
-	 *  - ERROR           ante cualquier error
-	 */
-	// RESPONSE_WRITE,
-
-	/**
-	 * leer respuesta del cliente al mensaje `HELLO`
-	 *
-	 * Intereses:
-	 *  - OP_READ sobre client_fd
-	 *
-	 * Transiciones:
-	 *  - REQUEST_READ   mientras el mensaje no esté completo
-	 *  - ERROR 		 ante cualquier error
-	 */
-	// REQUEST_READ,
-
-	/**
-	 * lee la data del cliente.
-	 *
-	 * Intereses:
-	 *  - OP_READ sobre client_fd
-	 */
-	// DATA_READ,
-
-	/**
-	 * escribe la data del cliente.
-	 *
-	 * Intereses:
-	 *     - NOP 	   sobre client_fd
-	 *     - OP_WRITE  sobre archivo_fd
-	 *
-	 * Transiciones:
-	 *  - DATA_WRITE    mientras tenga cosas para escribir
-	 *  - DATA_READ     cuando se me vacio el buffer
-	 *  - ERROR         ante cualquier error (IO/parseo)
-	 */
-	// DATA_WRITE,
-
 	DONE,
 	ERROR
 };
 
 struct smtp
 {
-	/** inforamción del cliente */
+	/** información del cliente */
 	struct sockaddr_storage client_addr;
 	socklen_t client_addr_len;
 
@@ -113,6 +63,8 @@ struct smtp
 	bool is_data;
 
 	char mailfrom[255];
+	char rcptto[255];
+	char data[2048];
 
 	int file_fd;
 };
@@ -122,10 +74,90 @@ struct status
 	int historic_connections, concurrent_connections, bytes_transfered, mails_sent;
 };
 
+static unsigned write_status(struct selector_key* key, unsigned current_state, unsigned next_state);
+static unsigned read_status(struct selector_key* key,
+                            unsigned current_state,
+                            unsigned (*read_process)(struct selector_key* key, struct smtp* state));
+static void read_init(const unsigned state, struct selector_key* key);
+
+static unsigned greeting_write(struct selector_key* key);
+static unsigned failed_connection_write(struct selector_key* key);
+static unsigned failed_connection_read_process(struct selector_key* key, struct smtp* state);
+static unsigned failed_connection_read(struct selector_key* key);
+static unsigned ehlo_read_process(struct selector_key* key, struct smtp* state);
+static unsigned ehlo_read(struct selector_key* key);
+static unsigned ehlo_write(struct selector_key* key);
+static unsigned mail_from_read_process(struct selector_key* key, struct smtp* state);
+static unsigned mail_from_read(struct selector_key* key);
+static unsigned mail_from_write(struct selector_key* key);
+static unsigned rcpt_to_read_process(struct selector_key* key, struct smtp* state);
+static unsigned rcpt_to_read(struct selector_key* key);
+static unsigned rcpt_to_write(struct selector_key* key);
+static unsigned data_read_process(struct selector_key* key, struct smtp* state);
+static unsigned data_read(struct selector_key* key);
+static unsigned data_write(struct selector_key* key);
+static unsigned mail_info_read_process(struct selector_key* key, struct smtp* state);
+static unsigned mail_info_read(struct selector_key* key);
+static unsigned mail_info_write(struct selector_key* key);
+
 struct status global_status = { 0 };
 
 static int historic_users = 0;
 static int current_users = 0;
+
+static unsigned
+write_status(struct selector_key* key, unsigned current_state, unsigned next_state)
+{
+	unsigned ret = current_state;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = next_state;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
+
+static unsigned
+read_status(struct selector_key* key,
+            unsigned current_state,
+            unsigned (*read_process)(struct selector_key* key, struct smtp* state))
+{
+	unsigned ret = current_state;
+	struct smtp* state = ATTACHMENT(key);
+
+	if (buffer_can_read(&state->read_buffer)) {
+		ret = read_process(key, state);
+	} else {
+		size_t count;
+		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
+		ssize_t n = recv(key->fd, ptr, count, 0);
+
+		if (n > 0) {
+			buffer_write_adv(&state->read_buffer, n);
+			ret = read_process(key, state);
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
 
 static unsigned
 greeting_write(struct selector_key* key)
@@ -137,8 +169,9 @@ greeting_write(struct selector_key* key)
 	buffer* wb = &state->write_buffer;
 
 	char* greeting = "220 localhost SMTP\r\n";
-	memcpy(&state->raw_buff_write, greeting, strlen(greeting));
-	buffer_write_adv(&state->write_buffer, strlen(greeting));
+	int len = strlen(greeting);
+	memcpy(&state->raw_buff_write, greeting, len);
+	buffer_write_adv(&state->write_buffer, len);
 
 	uint8_t* ptr = buffer_read_ptr(wb, &count);
 	ssize_t n = send(key->fd, ptr, count, 0);
@@ -157,6 +190,75 @@ greeting_write(struct selector_key* key)
 	}
 
 	return ret;
+}
+
+static unsigned
+failed_connection_write(struct selector_key* key)
+{
+	unsigned ret = FAILED_CONNECTION_WRITE;
+	struct smtp* state = ATTACHMENT(key);
+
+	size_t count;
+	buffer* wb = &state->write_buffer;
+
+	char* message = "554 failed connection to localhost SMTP\r\n";
+	int len = strlen(message);
+	memcpy(&state->raw_buff_write, message, len);
+	buffer_write_adv(&state->write_buffer, len);
+
+	uint8_t* ptr = buffer_read_ptr(wb, &count);
+	ssize_t n = send(key->fd, ptr, count, 0);
+
+	if (n > 0) {
+		buffer_read_adv(wb, n);
+		if (!buffer_can_read(wb)) {
+			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
+				ret = FAILED_CONNECTION_READ;
+			} else {
+				ret = ERROR;
+			}
+		}
+	} else {
+		ret = ERROR;
+	}
+
+	return ret;
+}
+
+static unsigned
+failed_connection_read_process(struct selector_key* key, struct smtp* state)
+{
+	unsigned ret = FAILED_CONNECTION_READ;
+
+	bool error = false;
+	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+
+	if (request_is_done(st, 0)) {
+		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
+			size_t count;
+			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
+
+			if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				ret = DONE;
+				strcpy((char*)ptr, "221 Bye\r\n");
+				buffer_write_adv(&state->write_buffer, 9);
+			} else {
+				ret = FAILED_CONNECTION_WRITE;
+				strcpy((char*)ptr, "500 Syntax error\r\n");
+				buffer_write_adv(&state->write_buffer, 18);
+			}
+		} else {
+			ret = ERROR;
+		}
+	}
+
+	return ret;
+}
+
+static unsigned
+failed_connection_read(struct selector_key* key)
+{
+	return read_status(key, FAILED_CONNECTION_READ, failed_connection_read_process);
 }
 
 static void
@@ -184,10 +286,14 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 				ret = EHLO_WRITE;
 				strcpy((char*)ptr, "250 EHLO received\r\n");
 				buffer_write_adv(&state->write_buffer, 19);
+			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				ret = DONE;
+				strcpy((char*)ptr, "221 Bye\r\n");
+				buffer_write_adv(&state->write_buffer, 9);
 			} else {
 				ret = EHLO_WRITE;
-				strcpy((char*)ptr, "250 Ok\r\n");
-				buffer_write_adv(&state->write_buffer, 8);
+				strcpy((char*)ptr, "500 Syntax error\r\n");
+				buffer_write_adv(&state->write_buffer, 18);
 			}
 		} else {
 			ret = ERROR;
@@ -200,53 +306,13 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 static unsigned
 ehlo_read(struct selector_key* key)
 {
-	unsigned ret = EHLO_READ;
-	struct smtp* state = ATTACHMENT(key);
-
-	if (buffer_can_read(&state->read_buffer)) {
-		ret = ehlo_read_process(key, state);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
-
-		if (n > 0) {
-			buffer_write_adv(&state->read_buffer, n);
-			ret = ehlo_read_process(key, state);
-		} else {
-			ret = ERROR;
-		}
-	}
-
-	return ret;
+	return read_status(key, EHLO_READ, ehlo_read_process);
 }
 
 static unsigned
 ehlo_write(struct selector_key* key)
 {
-	unsigned ret = EHLO_WRITE;
-	struct smtp* state = ATTACHMENT(key);
-
-	size_t count;
-	buffer* wb = &state->write_buffer;
-
-	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
-
-	if (n > 0) {
-		buffer_read_adv(wb, n);
-		if (!buffer_can_read(wb)) {
-			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = MAIL_FROM_READ;
-			} else {
-				ret = ERROR;
-			}
-		}
-	} else {
-		ret = ERROR;
-	}
-
-	return ret;
+	return write_status(key, EHLO_WRITE, MAIL_FROM_READ);
 }
 
 static unsigned
@@ -264,6 +330,7 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 
 			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "MAIL FROM: <mail@mail.com>"
 			if (strcasecmp(state->request_parser.request->verb, "mail from:") == 0) {
+				strcpy(state->mailfrom, state->request_parser.request->arg1);
 				ret = MAIL_FROM_WRITE;
 				strcpy((char*)ptr, "250 Mail from received\r\n");
 				buffer_write_adv(&state->write_buffer, 24);
@@ -287,53 +354,13 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 static unsigned
 mail_from_read(struct selector_key* key)
 {
-	unsigned ret = MAIL_FROM_READ;
-	struct smtp* state = ATTACHMENT(key);
-
-	if (buffer_can_read(&state->read_buffer)) {
-		ret = mail_from_read_process(key, state);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
-
-		if (n > 0) {
-			buffer_write_adv(&state->read_buffer, n);
-			ret = mail_from_read_process(key, state);
-		} else {
-			ret = ERROR;
-		}
-	}
-
-	return ret;
+	return read_status(key, MAIL_FROM_READ, mail_from_read_process);
 }
 
 static unsigned
 mail_from_write(struct selector_key* key)
 {
-	unsigned ret = MAIL_FROM_WRITE;
-	struct smtp* state = ATTACHMENT(key);
-
-	size_t count;
-	buffer* wb = &state->write_buffer;
-
-	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
-
-	if (n > 0) {
-		buffer_read_adv(wb, n);
-		if (!buffer_can_read(wb)) {
-			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = RCPT_TO_READ;
-			} else {
-				ret = ERROR;
-			}
-		}
-	} else {
-		ret = ERROR;
-	}
-
-	return ret;
+	return write_status(key, MAIL_FROM_WRITE, RCPT_TO_READ);
 }
 
 static unsigned
@@ -349,14 +376,14 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
-			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "RCPT TP: <mail@mail.com>"
+			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "RCPT TO: <mail@mail.com>"
 			if (strcasecmp(state->request_parser.request->verb, "rcpt to:") == 0) {
+				strcpy(state->rcptto, state->request_parser.request->arg1);
 				ret = RCPT_TO_WRITE;
 				strcpy((char*)ptr, "250 Rcpt to received\r\n");
 				buffer_write_adv(&state->write_buffer, 22);
 			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
 				ret = DONE;
-				// LIMPIAR EL MAIL FROM
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
 			} else {
@@ -375,53 +402,13 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 static unsigned
 rcpt_to_read(struct selector_key* key)
 {
-	unsigned ret = RCPT_TO_READ;
-	struct smtp* state = ATTACHMENT(key);
-
-	if (buffer_can_read(&state->read_buffer)) {
-		ret = rcpt_to_read_process(key, state);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
-
-		if (n > 0) {
-			buffer_write_adv(&state->read_buffer, n);
-			ret = rcpt_to_read_process(key, state);
-		} else {
-			ret = ERROR;
-		}
-	}
-
-	return ret;
+	return read_status(key, RCPT_TO_READ, rcpt_to_read_process);
 }
 
 static unsigned
 rcpt_to_write(struct selector_key* key)
 {
-	unsigned ret = RCPT_TO_WRITE;
-	struct smtp* state = ATTACHMENT(key);
-
-	size_t count;
-	buffer* wb = &state->write_buffer;
-
-	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
-
-	if (n > 0) {
-		buffer_read_adv(wb, n);
-		if (!buffer_can_read(wb)) {
-			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = DATA_READ;
-			} else {
-				ret = ERROR;
-			}
-		}
-	} else {
-		ret = ERROR;
-	}
-
-	return ret;
+	return write_status(key, RCPT_TO_WRITE, DATA_READ);
 }
 
 static unsigned
@@ -444,8 +431,6 @@ data_read_process(struct selector_key* key, struct smtp* state)
 				buffer_write_adv(&state->write_buffer, 37);
 			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
 				ret = DONE;
-				// LIMPIAR EL MAIL FROM
-				// LIMPIAR EL RCPT TO
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
 			} else {
@@ -464,53 +449,13 @@ data_read_process(struct selector_key* key, struct smtp* state)
 static unsigned
 data_read(struct selector_key* key)
 {
-	unsigned ret = DATA_READ;
-	struct smtp* state = ATTACHMENT(key);
-
-	if (buffer_can_read(&state->read_buffer)) {
-		ret = data_read_process(key, state);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
-
-		if (n > 0) {
-			buffer_write_adv(&state->read_buffer, n);
-			ret = data_read_process(key, state);
-		} else {
-			ret = ERROR;
-		}
-	}
-
-	return ret;
+	return read_status(key, DATA_READ, data_read_process);
 }
 
 static unsigned
 data_write(struct selector_key* key)
 {
-	unsigned ret = DATA_WRITE;
-	struct smtp* state = ATTACHMENT(key);
-
-	size_t count;
-	buffer* wb = &state->write_buffer;
-
-	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
-
-	if (n > 0) {
-		buffer_read_adv(wb, n);
-		if (!buffer_can_read(wb)) {
-			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = MAIL_INFO_READ;
-			} else {
-				ret = ERROR;
-			}
-		}
-	} else {
-		ret = ERROR;
-	}
-
-	return ret;
+	return write_status(key, DATA_WRITE, MAIL_INFO_READ);
 }
 
 static unsigned
@@ -526,14 +471,15 @@ mail_info_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
+			// TODO: PARSEAR LA INFO DEL MAIL
 			if (strcasecmp(state->request_parser.request->verb, "\r\n.\r\n") == 0) {
 				ret = MAIL_FROM_WRITE;
 				strcpy((char*)ptr, "250 Ok: queued");
 				buffer_write_adv(&state->write_buffer, 12);
 			} else {
 				ret = MAIL_FROM_WRITE;
-				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 18);
+				strcpy((char*)ptr, "554 Transaction failed\r\n");
+				buffer_write_adv(&state->write_buffer, 24);
 			}
 		} else {
 			ret = ERROR;
@@ -546,59 +492,28 @@ mail_info_read_process(struct selector_key* key, struct smtp* state)
 static unsigned
 mail_info_read(struct selector_key* key)
 {
-	unsigned ret = MAIL_INFO_READ;
-	struct smtp* state = ATTACHMENT(key);
-
-	if (buffer_can_read(&state->read_buffer)) {
-		ret = mail_info_read_process(key, state);
-	} else {
-		size_t count;
-		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
-
-		if (n > 0) {
-			buffer_write_adv(&state->read_buffer, n);
-			ret = mail_info_read_process(key, state);
-		} else {
-			ret = ERROR;
-		}
-	}
-
-	return ret;
+	return read_status(key, MAIL_INFO_READ, mail_info_read_process);
 }
 
 static unsigned
 mail_info_write(struct selector_key* key)
 {
-	unsigned ret = MAIL_INFO_WRITE;
-	struct smtp* state = ATTACHMENT(key);
-
-	size_t count;
-	buffer* wb = &state->write_buffer;
-
-	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
-
-	if (n > 0) {
-		buffer_read_adv(wb, n);
-		if (!buffer_can_read(wb)) {
-			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = MAIL_FROM_READ;
-			} else {
-				ret = ERROR;
-			}
-		}
-	} else {
-		ret = ERROR;
-	}
-
-	return ret;
+	return write_status(key, MAIL_INFO_WRITE, MAIL_FROM_READ);
 }
 
 static const struct state_definition client_statbl[] = {
 	{
 	    .state = GREETING_WRITE,
 	    .on_write_ready = greeting_write,
+	},
+	{
+	    .state = FAILED_CONNECTION_READ,
+	    .on_arrival = read_init,
+	    .on_read_ready = failed_connection_read,
+	},
+	{
+	    .state = FAILED_CONNECTION_WRITE,
+	    .on_write_ready = failed_connection_write,
 	},
 	{
 	    .state = EHLO_READ,
@@ -746,7 +661,11 @@ smtp_passive_accept(struct selector_key* key)
 	memcpy(&state->client_addr, &client_addr, client_addr_len);
 	state->client_addr_len = client_addr_len;
 
-	state->stm.initial = GREETING_WRITE;
+	if (current_users < MAX_USERS) {
+		state->stm.initial = GREETING_WRITE;
+	} else {
+		state->stm.initial = FAILED_CONNECTION_WRITE;
+	}
 	state->stm.max_state = ERROR;
 	state->stm.states = client_statbl;
 	stm_init(&state->stm);
