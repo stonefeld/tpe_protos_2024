@@ -65,6 +65,7 @@ extern void
 request_parser_init(struct request_parser* p)
 {
 	p->state = request_verb;
+	p->i = 0;
 	memset(p->request, 0, sizeof(*(p->request)));
 }
 
