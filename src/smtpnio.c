@@ -29,10 +29,10 @@ enum smtp_state
 	EHLO_WRITE,
 	MAIL_FROM_READ,
 	MAIL_FROM_WRITE,
-	RCPT_TO_READ,
-	RCPT_TO_WRITE,
-	DATA_READ,
-	DATA_WRITE,
+	// RCPT_TO_READ,
+	// RCPT_TO_WRITE,
+	// DATA_READ,
+	// DATA_WRITE,
 	/* MAIL_FROM_RESPONSE_WRITE,
 	RCPT_TO_READ,
 	RCPT_TO_RESPONSE_WRITE,
@@ -317,7 +317,7 @@ mail_from_write(struct selector_key* key)
 		buffer_read_adv(wb, n);
 		if (!buffer_can_read(wb)) {
 			if (selector_set_interest_key(key, OP_READ) == SELECTOR_SUCCESS) {
-				ret = RCPT_TO_READ;
+				ret = EHLO_READ;
 			} else {
 				ret = ERROR;
 			}
