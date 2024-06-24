@@ -7,14 +7,62 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+enum request_command
+{
+	request_command_ehlo,
+	request_command_mail,
+	request_command_rcpt,
+	request_command_data,
+	request_command_rset,
+	request_command_quit,
+	request_command_noop,
+	request_command_vrfy,
+	request_command_expn,
+	request_command_help,
+	request_command_unknown,
+};
+
 enum request_state
 {
 	request_verb,
-	request_sep_arg1,
-	request_arg1,
+
+	request_verb_e,
+	request_verb_eh,
+	request_verb_ehl,
+	request_verb_ehlo,
+
+	request_verb_m,
+	request_verb_ma,
+	request_verb_mai,
+	request_verb_mail,
+	request_verb_mail_,
+	request_verb_mail_f,
+	request_verb_mail_fr,
+	request_verb_mail_fro,
+	request_verb_mail_from,
+
+	request_verb_r,
+	request_verb_rc,
+	request_verb_rcp,
+	request_verb_rcpt,
+	request_verb_rcpt_,
+	request_verb_rcpt_t,
+	request_verb_rcpt_to,
+
+	request_verb_d,
+	request_verb_da,
+	request_verb_dat,
+	request_verb_data,
+
+	request_verb_q,
+	request_verb_qu,
+	request_verb_qui,
+	request_verb_quit,
+
+	request_ehlo_sep,
+	request_ehlo_domain,
 
 	request_cr,
-	request_data,
 
 	// apartir de aca están done
 	request_done,
@@ -30,12 +78,15 @@ struct request
 {
 	char verb[10];
 	char arg1[32];
+	char domain[32];
 };
 
 struct request_parser
 {
 	struct request* request;
 	enum request_state state;
+
+	enum request_command command;
 
 	/** cuantos bytes ya leimos */
 	uint8_t i;

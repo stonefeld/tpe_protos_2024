@@ -283,11 +283,12 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
-			if (strcasecmp(state->request_parser.request->verb, "ehlo") == 0) {
+			if (state->request_parser.command == request_command_ehlo) {
 				ret = EHLO_WRITE;
-				strcpy((char*)ptr, "250 EHLO received\r\n");
-				buffer_write_adv(&state->write_buffer, 19);
-			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				char s[] = "250 EHLO received - %s\n\n";
+				sprintf((char*)ptr, s, state->request_parser.request->domain);
+				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);

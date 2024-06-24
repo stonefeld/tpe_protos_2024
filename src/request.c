@@ -6,51 +6,6 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-static enum request_state verb(const uint8_t c, struct request_parser* p);
-static enum request_state sep_arg1(const uint8_t c, struct request_parser* p);
-static enum request_state arg1(const uint8_t c, struct request_parser* p);
-
-static enum request_state
-verb(const uint8_t c, struct request_parser* p)
-{
-	enum request_state next;
-
-	switch (c) {
-		case '\r': {
-			next = request_cr;
-		} break;
-
-		default: {
-			next = request_verb;
-		} break;
-	}
-
-	if (next == request_verb) {
-		p->request->verb[p->i++] = c;
-		// if (p->i < sizeof(p->request->verb) - 1)  // TODO: Check this
-		// 	p->request->verb[p->i++] = (char)c;
-	} else {
-		p->request->verb[p->i] = 0;
-		/*if (strcmp(p->request->verb, "data") == 0)
-		    next = request_data;*/
-	}
-
-	return next;
-}
-
-static enum request_state
-sep_arg1(const uint8_t c, struct request_parser* p)
-{
-	return request_arg1;
-}
-
-static enum request_state
-arg1(const uint8_t c, struct request_parser* p)
-{
-	p->request->arg1[0] = c;
-	return request_done;
-}
-
 void
 request_parser_init(struct request_parser* p)
 {
@@ -66,15 +21,218 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 	switch (p->state) {
 		case request_verb: {
-			next = verb(c, p);
+			switch (c) {
+				case 'e':
+				case 'E': {
+					next = request_verb_e;
+				} break;
+
+				case 'm':
+				case 'M': {
+					next = request_verb_m;
+				} break;
+
+				case 'r':
+				case 'R': {
+					next = request_verb_r;
+				} break;
+
+				case 'd':
+				case 'D': {
+					next = request_verb_d;
+				} break;
+
+				case 'q':
+				case 'Q': {
+					next = request_verb_q;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
 		} break;
 
-		case request_sep_arg1: {
-			next = sep_arg1(c, p);
+		case request_verb_e: {
+			switch (c) {
+				case 'h':
+				case 'H': {
+					next = request_verb_eh;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
 		} break;
 
-		case request_arg1: {
-			next = arg1(c, p);
+		case request_verb_eh: {
+			switch (c) {
+				case 'l':
+				case 'L': {
+					next = request_verb_ehl;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_ehl: {
+			switch (c) {
+				case 'o':
+				case 'O': {
+					next = request_verb_ehlo;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_ehlo: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_ehlo_sep;
+				} break;
+
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_ehlo;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_ehlo_sep: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_ehlo_sep;
+				} break;
+
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_ehlo;
+				} break;
+
+				default: {
+					next = request_ehlo_domain;
+					p->i = 0;
+					p->request->domain[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_ehlo_domain: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_ehlo;
+				} break;
+
+				default: {
+					next = request_ehlo_domain;
+					p->request->domain[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_verb_m: {
+			switch (c) {
+				case 'a':
+				case 'A': {
+					next = request_verb_ma;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_r: {
+			switch (c) {
+				case 'c':
+				case 'C': {
+					next = request_verb_rc;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_d: {
+			switch (c) {
+				case 'a':
+				case 'A': {
+					next = request_verb_da;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_q: {
+			switch (c) {
+				case 'u':
+				case 'U': {
+					next = request_verb_qu;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_qu: {
+			switch (c) {
+				case 'i':
+				case 'I': {
+					next = request_verb_qui;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_qui: {
+			switch (c) {
+				case 't':
+				case 'T': {
+					next = request_verb_quit;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_quit: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_quit;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
 		} break;
 
 		case request_cr: {
@@ -89,7 +247,6 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			}
 		} break;
 
-		case request_data:
 		case request_done:
 		case request_error: {
 			next = p->state;
