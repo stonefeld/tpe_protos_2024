@@ -31,130 +31,197 @@ static bool done = false;
 static void
 sigterm_handler(const int signal)
 {
-	printf("signal %d, cleaning up and exiting\n", signal);
-	done = true;
+    printf("signal %d, cleaning up and exiting\n", signal);
+    done = true;
+}
+
+// Manejador de lectura para el socket UDP
+static void
+udp_read_handler(struct selector_key *key)
+{
+    char buffer[1024];
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+    ssize_t received = recvfrom(key->fd, buffer, sizeof(buffer) - 1, 0,
+                                (struct sockaddr *)&client_addr, &client_addr_len);
+    if (received < 0) {
+        perror("recvfrom");
+        return;
+    }
+    buffer[received] = '\0';
+    printf("UDP data: %s\n", buffer);
+
+    // Logica de los paquetes udp
 }
 
 int
 main(int argc, char** argv)
 {
-	struct socks5args args;
-	parse_args(argc, argv, &args);
+    struct socks5args args;
+    parse_args(argc, argv, &args);
 
-	close(0);
+    close(0);
 
-	const char* err_msg = NULL;
-	selector_status ss = SELECTOR_SUCCESS;
-	fd_selector selector = NULL;
+    const char* err_msg = NULL;
+    selector_status ss = SELECTOR_SUCCESS;
+    fd_selector selector = NULL;
 
-	struct sockaddr_in addr;
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(args.smtp_port);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(args.smtp_port);
 
-	const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (server < 0) {
-		err_msg = "unable to create socket";
-		goto finally;
-	}
+    const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const int server_6969 = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (server < 0) {
+        err_msg = "unable to create socket";
+        goto finally_tcp;
+    }
 
-	fprintf(stdout, "Listening on TCP port %d\n", args.smtp_port);
+    if (server_6969 < 0) {
+        err_msg = "unable to create socket for port 6969";
+        goto finally_udp;
+    }
 
-	// man 7 ip. no importa reportar nada si falla.
-	setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+    fprintf(stdout, "Listening on TCP port %d\n", args.smtp_port);
 
-	if (bind(server, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-		err_msg = "unable to bind socket";
-		goto finally;
-	}
+    // man 7 ip. no importa reportar nada si falla.
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
-	if (listen(server, 20) < 0) {
-		err_msg = "unable to listen";
-		goto finally;
-	}
+    if (bind(server, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        err_msg = "unable to bind socket";
+        goto finally;
+    }
 
-	// registrar sigterm es útil para terminar el programa normalmente.
-	// esto ayuda mucho en herramientas como valgrind.
-	signal(SIGTERM, sigterm_handler);
-	signal(SIGINT, sigterm_handler);
+    if (listen(server, 20) < 0) {
+        err_msg = "unable to listen";
+        goto finally;
+    }
 
-	if (selector_fd_set_nio(server) == -1) {
-		err_msg = "getting server socket flags";
-		goto finally;
-	}
+    // Socket en el puerto 6969 con UDP
+    struct sockaddr_in addr_6969;
+    memset(&addr_6969, 0, sizeof(addr_6969));
+    addr_6969.sin_family = AF_INET;
+    addr_6969.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr_6969.sin_port = htons(6969);
 
-	const struct selector_init conf = {
-		.signal = SIGALRM,
-		.select_timeout = {
-			.tv_sec  = 10,
-			.tv_nsec = 0,
-		},
-	};
+    fprintf(stdout, "Listening on UDP port 6969\n");
 
-	if (0 != selector_init(&conf)) {
-		err_msg = "initializing selector";
-		goto finally;
-	}
+    setsockopt(server_6969, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
-	selector = selector_new(1024);
+    if (bind(server_6969, (struct sockaddr*)&addr_6969, sizeof(addr_6969)) < 0) {
+        err_msg = "unable to bind socket for port 6969";
+        goto finally;
+    }
 
-	if (selector == NULL) {
-		err_msg = "unable to create selector";
-		goto finally;
-	}
+    // No uso listen para UDP
 
-	const struct fd_handler smtp = {
-		.handle_read = smtp_passive_accept,
-		.handle_write = NULL,
-		.handle_close = NULL,  // nada que liberar
-	};
+    // registrar sigterm es útil para terminar el programa normalmente.
+    // esto ayuda mucho en herramientas como valgrind.
+    signal(SIGTERM, sigterm_handler);
+    signal(SIGINT, sigterm_handler);
 
-	ss = selector_register(selector, server, &smtp, OP_READ, NULL);
+    if (selector_fd_set_nio(server) == -1) {
+        err_msg = "getting server socket flags";
+        goto finally;
+    }
 
-	if (ss != SELECTOR_SUCCESS) {
-		err_msg = "registering fd";
-		goto finally;
-	}
+    if (selector_fd_set_nio(server_6969) == -1) {
+        err_msg = "getting server_6969 socket flags";
+        goto finally;
+    }
 
-	while (!done) {
-		err_msg = NULL;
-		ss = selector_select(selector);
-		if (ss != SELECTOR_SUCCESS) {
-			err_msg = "serving";
-			goto finally;
-		}
-	}
+    const struct selector_init conf = {
+        .signal = SIGALRM,
+        .select_timeout = {
+            .tv_sec  = 10,
+            .tv_nsec = 0,
+        },
+    };
 
-	if (err_msg == NULL) {
-		err_msg = "closing";
-	}
+    if (0 != selector_init(&conf)) {
+        err_msg = "initializing selector";
+        goto finally;
+    }
 
-	int ret = 0;
+    selector = selector_new(1024);
+
+    if (selector == NULL) {
+        err_msg = "unable to create selector";
+        goto finally;
+    }
+
+    const struct fd_handler smtp = {
+        .handle_read = smtp_passive_accept,
+        .handle_write = NULL,
+        .handle_close = NULL,  // nada que liberar
+    };
+
+    const struct fd_handler udp = {
+        .handle_read = udp_read_handler,
+        .handle_write = NULL,
+        .handle_close = NULL,  // nada que liberar
+    };
+
+    ss = selector_register(selector, server, &smtp, OP_READ, NULL);
+
+    if (ss != SELECTOR_SUCCESS) {
+        err_msg = "registering fd";
+        goto finally;
+    }
+
+    // Registrar el socket UDP
+    ss = selector_register(selector, server_6969, &udp, OP_READ, NULL);
+
+    if (ss != SELECTOR_SUCCESS) {
+        err_msg = "registering fd for port 6969";
+        goto finally;
+    }
+
+    while (!done) {
+        err_msg = NULL;
+        ss = selector_select(selector);
+        if (ss != SELECTOR_SUCCESS) {
+            err_msg = "serving";
+            goto finally;
+        }
+    }
+
+    if (err_msg == NULL) {
+        err_msg = "closing";
+    }
+
+    int ret = 0;
+
+    // socksv5_pool_destroy();
+
+finally_udp:
+    if (server_6969 >= 0) {
+        close(server_6969);
+    }
+
+finally_tcp:
+    if (server >= 0) {
+        close(server);
+    }
 
 finally:
-	if (ss != SELECTOR_SUCCESS) {
-		fprintf(stderr,
-		        "%s: %s\n",
-		        (err_msg == NULL) ? "" : err_msg,
-		        ss == SELECTOR_IO ? strerror(errno) : selector_error(ss));
-		ret = 2;
-	} else if (err_msg) {
-		perror(err_msg);
-		ret = 1;
-	}
+    if (ss != SELECTOR_SUCCESS) {
+        fprintf(stderr,
+                "%s: %s\n",
+                (err_msg == NULL) ? "" : err_msg,
+                ss == SELECTOR_IO ? strerror(errno) : selector_error(ss));
+        ret = 2;
+    } else if (err_msg) {
+        perror(err_msg);
+        ret = 1;
+    }
 
-	if (selector != NULL) {
-		selector_destroy(selector);
-	}
+    if (selector != NULL) {
+        selector_destroy(selector);
+    }
 
-	selector_close();
-
-	// socksv5_pool_destroy();
-
-	if (server >= 0) {
-		close(server);
-	}
-
-	return ret;
+    selector_close();
+    return ret;
 }
