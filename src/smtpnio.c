@@ -54,6 +54,7 @@ struct smtp
 	/** parser */
 	struct request request;
 	struct request_parser request_parser;
+
 	struct data_parser data_parser;
 
 	/** buffers */
@@ -64,7 +65,6 @@ struct smtp
 
 	char mailfrom[255];
 	char rcptto[255];
-	char data[2048];
 
 	int file_fd;
 };
@@ -78,7 +78,8 @@ static unsigned write_status(struct selector_key* key, unsigned current_state, u
 static unsigned read_status(struct selector_key* key,
                             unsigned current_state,
                             unsigned (*read_process)(struct selector_key* key, struct smtp* state));
-static void read_init(const unsigned state, struct selector_key* key);
+static void request_read_init(const unsigned state, struct selector_key* key);
+static void data_buffer_init(const unsigned state, struct selector_key* key);
 
 static unsigned greeting_write(struct selector_key* key);
 static unsigned failed_connection_write(struct selector_key* key);
@@ -262,7 +263,7 @@ failed_connection_read(struct selector_key* key)
 }
 
 static void
-read_init(const unsigned state, struct selector_key* key)
+request_read_init(const unsigned state, struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
 	p->request = &ATTACHMENT(key)->request;
@@ -458,26 +459,36 @@ data_write(struct selector_key* key)
 	return write_status(key, DATA_WRITE, MAIL_INFO_READ);
 }
 
+static void
+data_buffer_init(const unsigned state, struct selector_key* key)
+{
+	struct smtp* s = ATTACHMENT(key);
+	struct data_parser* p = &s->data_parser;
+	data_parser_init(p);
+}
+
 static unsigned
 mail_info_read_process(struct selector_key* key, struct smtp* state)
 {
 	unsigned ret = MAIL_INFO_READ;
 
-	bool error = false;
-	int st = request_consume(&state->read_buffer, &state->request_parser, &error);
+	int st = data_consume(&state->read_buffer, &state->data_parser);
 
-	if (request_is_done(st, 0)) {
+	if (data_is_done(st)) {
 		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
 			// TODO: PARSEAR LA INFO DEL MAIL
-			if (strcasecmp(state->request_parser.request->verb, "\r\n.\r\n") == 0) {
-				ret = MAIL_FROM_WRITE;
-				strcpy((char*)ptr, "250 Ok: queued");
-				buffer_write_adv(&state->write_buffer, 12);
+
+			if (state->data_parser.state == data_done) {
+				ret = MAIL_INFO_WRITE;
+				char* message = "250 Ok: queued\r\n";
+				strcpy((char*)ptr, message);
+				buffer_write_adv(&state->write_buffer, strlen(message));
 			} else {
-				ret = MAIL_FROM_WRITE;
+				// TODO: capaz cambiar a mail from otra vez
+				ret = ERROR;
 				strcpy((char*)ptr, "554 Transaction failed\r\n");
 				buffer_write_adv(&state->write_buffer, 24);
 			}
@@ -508,7 +519,7 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = FAILED_CONNECTION_READ,
-	    .on_arrival = read_init,
+	    .on_arrival = request_read_init,
 	    .on_read_ready = failed_connection_read,
 	},
 	{
@@ -517,7 +528,7 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = EHLO_READ,
-	    .on_arrival = read_init,
+	    .on_arrival = request_read_init,
 	    .on_read_ready = ehlo_read,
 	},
 	{
@@ -526,7 +537,7 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = MAIL_FROM_READ,
-	    .on_arrival = read_init,
+	    .on_arrival = request_read_init,
 	    .on_read_ready = mail_from_read,
 	},
 	{
@@ -535,7 +546,7 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = RCPT_TO_READ,
-	    .on_arrival = read_init,
+	    .on_arrival = request_read_init,
 	    .on_read_ready = rcpt_to_read,
 	},
 	{
@@ -544,16 +555,16 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = DATA_READ,
-	    .on_arrival = read_init,
+	    .on_arrival = request_read_init,
 	    .on_read_ready = data_read,
 	},
 	{
 	    .state = DATA_WRITE,
+	    .on_departure = data_buffer_init,
 	    .on_write_ready = data_write,
 	},
 	{
 	    .state = MAIL_INFO_READ,
-	    .on_arrival = read_init,
 	    .on_read_ready = mail_info_read,
 	},
 	{

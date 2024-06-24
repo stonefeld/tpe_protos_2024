@@ -66,14 +66,14 @@ main(int argc, char** argv)
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(args.smtp_port);
+	struct sockaddr_in6 addr;
+	memset(&addr, 0, sizeof(addr));
+	addr.sin6_family = AF_INET6;
+	addr.sin6_addr = in6addr_any;
+	addr.sin6_port = htons(args.smtp_port);
 
-    const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    const int server_6969 = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    const int server = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+    const int server_6969 = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
     if (server < 0) {
         err_msg = "unable to create socket";
         goto finally_tcp;
@@ -86,8 +86,9 @@ main(int argc, char** argv)
 
     fprintf(stdout, "Listening on TCP port %d\n", args.smtp_port);
 
-    // man 7 ip. no importa reportar nada si falla.
-    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+	// man 7 ip. no importa reportar nada si falla.
+	setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+	setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 0 }, sizeof(int));
 
     if (bind(server, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         err_msg = "unable to bind socket";
@@ -100,11 +101,11 @@ main(int argc, char** argv)
     }
 
     // Socket en el puerto 6969 con UDP
-    struct sockaddr_in addr_6969;
+    struct sockaddr_in6 addr_6969;
     memset(&addr_6969, 0, sizeof(addr_6969));
-    addr_6969.sin_family = AF_INET;
-    addr_6969.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr_6969.sin_port = htons(6969);
+    addr_6969.sin6_family = AF_INET6;
+    addr_6969.sin6_addr = in6addr_any;
+    addr_6969.sin6_port = htons(6969);
 
     fprintf(stdout, "Listening on UDP port 6969\n");
 
