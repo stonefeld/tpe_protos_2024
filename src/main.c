@@ -26,6 +26,8 @@
 #include <sys/types.h>   // socket
 #include <unistd.h>
 
+#define RESPONSE_SIZE 16
+
 static bool done = false;
 
 static void
@@ -33,6 +35,37 @@ sigterm_handler(const int signal)
 {
     printf("signal %d, cleaning up and exiting\n", signal);
     done = true;
+}
+
+/*
+* RESPONSE:
+*   Protocol signature - 2 bytes - 0xFF 0xFE 
+*   Versión del protocolo - 1 byte -  0x00
+*   Identificador del request - 2 bytes
+*   Status - 1 byte
+*       Success - 0x00
+*   Errors:
+*       Auth failed - 0x01
+*       Invalid version - 0x02
+*       Invalid command - 0x03
+*       Invalid request (length) - 0x04
+*       Unexpected error - 0x05
+*       0x06 - 0xFF saved for future errors
+Respuesta:
+*   Cantidad - (uint64_t) 8 bytes unsigned en Big Endian (Network Order)
+*   Booleano (0x00 TRUE - 0x01 FALSE) - 1 byte
+
+*/
+
+void uint64_to_big_endian(uint64_t value, uint8_t *buffer) {
+    buffer[0] = (value >> 56) & 0xFF;
+    buffer[1] = (value >> 48) & 0xFF;
+    buffer[2] = (value >> 40) & 0xFF;
+    buffer[3] = (value >> 32) & 0xFF;
+    buffer[4] = (value >> 24) & 0xFF;
+    buffer[5] = (value >> 16) & 0xFF;
+    buffer[6] = (value >> 8) & 0xFF;
+    buffer[7] = value & 0xFF;
 }
 
 // Manejador de lectura para el socket UDP
@@ -49,7 +82,79 @@ udp_read_handler(struct selector_key *key)
         return;
     }
     buffer[received] = '\0';
-    printf("UDP data: %s\n", buffer);
+    // printf("UDP data: %s\n", buffer);
+    switch (buffer[0])
+    {
+    case 'a':
+        printf("Historic users %d\n", get_historic_users());
+        break;
+
+    case 'b':
+        printf("Current users %d\n",get_current_users());
+        break;
+    
+    default:
+        break;
+    }
+
+    uint8_t response[RESPONSE_SIZE]; // 2 + 1 + 2 + 1 + 8 + 1 = 15 bytes + 1 byte de padding
+    size_t offset = 0;
+
+    // Protocol signature
+    response[offset++] = 0xFF;
+    response[offset++] = 0xFE;
+
+    // Versión del protocolo
+    response[offset++] = 0x00;
+
+    // Identificador del request (por simplicidad, aquí usamos 0x0001)
+    response[offset++] = 0x00;
+    response[offset++] = 0x01;
+
+    // Status (Success y manejar errores)
+    response[offset++] = 0x00;
+
+    // Cantidad (traer los datos posta Big Endian)
+    uint64_t cantidad;
+    switch (buffer[0])
+    {
+    case 'a':
+        printf("Historic users %d\n", get_historic_users());
+        cantidad = get_historic_users();
+        break;
+
+    case 'b':
+        printf("Current users %d\n",get_current_users());
+        cantidad = get_current_users();
+        break;
+    
+    default:
+        cantidad = 1234; // valor falopa para testear
+        break;
+    }
+    // printf("Cant: %ld\n",cantidad);
+    uint64_to_big_endian(cantidad, &response[offset]);
+    offset += 8;
+
+    // Booleano (TRUE)
+    response[offset++] = 0x00;
+
+    printf("response: ");
+    for (size_t i = 0; i < offset; i++) {
+        printf("%02X ", response[i]);
+    }
+    printf("\n");
+
+    
+    // me esta tirando un error
+
+    // ssize_t sent = sendto(key->fd, response,RESPONSE_SIZE, 0,
+    //                       (struct sockaddr *)&client_addr, client_addr_len);
+    // if (sent < 0) {
+    //     perror("sendto");
+    //     return;
+    // }
+
 
     // Logica de los paquetes udp
 }

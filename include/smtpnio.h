@@ -5,4 +5,8 @@
 
 void smtp_passive_accept(struct selector_key* key);
 
+int get_historic_users();
+
+int get_current_users();
+
 #endif

@@ -106,6 +106,14 @@ struct status global_status = { 0 };
 static int historic_users = 0;
 static int current_users = 0;
 
+int get_historic_users(){
+	return historic_users;
+}
+
+int get_current_users(){
+	return current_users;
+}
+
 static unsigned
 write_status(struct selector_key* key, unsigned current_state, unsigned next_state)
 {
