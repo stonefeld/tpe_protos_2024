@@ -7,12 +7,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-struct request
-{
-	char verb[10];
-	char arg1[32];
-};
-
 enum request_state
 {
 	request_verb,
@@ -32,10 +26,17 @@ enum request_state
 	request_error_invalid_length, */
 };
 
+struct request
+{
+	char verb[10];
+	char arg1[32];
+};
+
 struct request_parser
 {
 	struct request* request;
 	enum request_state state;
+
 	/** cuantos bytes ya leimos */
 	uint8_t i;
 };

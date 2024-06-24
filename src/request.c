@@ -4,27 +4,17 @@
 #include "request.h"
 
 #include <arpa/inet.h>
-#include <string.h>  // memset
+#include <string.h>
 
-static void
-remaining_set(struct request_parser* p, const int n)
-{
-	p->i = 0;
-	// p->n = n;
-}
-
-// static int
-// remaining_is_done(struct request_parser* p)
-// {
-// 	return p->i >= p->n;
-// }
-
-//////////////////////////////////////////////////////////////////////////////
+static enum request_state verb(const uint8_t c, struct request_parser* p);
+static enum request_state sep_arg1(const uint8_t c, struct request_parser* p);
+static enum request_state arg1(const uint8_t c, struct request_parser* p);
 
 static enum request_state
 verb(const uint8_t c, struct request_parser* p)
 {
 	enum request_state next;
+
 	switch (c) {
 		case '\r': {
 			next = request_cr;
@@ -61,7 +51,7 @@ arg1(const uint8_t c, struct request_parser* p)
 	return request_done;
 }
 
-extern void
+void
 request_parser_init(struct request_parser* p)
 {
 	p->state = request_verb;
@@ -69,7 +59,7 @@ request_parser_init(struct request_parser* p)
 	memset(p->request, 0, sizeof(*(p->request)));
 }
 
-extern enum request_state
+enum request_state
 request_parser_feed(struct request_parser* p, const uint8_t c)
 {
 	enum request_state next;
@@ -113,15 +103,7 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 	return p->state = next;
 }
 
-extern bool
-request_is_done(const enum request_state st, bool* errored)
-{
-	if (st >= request_error && errored != 0)
-		*errored = true;
-	return st >= request_done;
-}
-
-extern enum request_state
+enum request_state
 request_consume(buffer* b, struct request_parser* p, bool* errored)
 {
 	enum request_state st = p->state;
@@ -129,14 +111,22 @@ request_consume(buffer* b, struct request_parser* p, bool* errored)
 	while (buffer_can_read(b)) {
 		const uint8_t c = buffer_read(b);
 		st = request_parser_feed(p, c);
-		if (request_is_done(st, errored)) {
+		if (request_is_done(st, errored))
 			break;
-		}
 	}
+
 	return st;
 }
 
-extern void
+bool
+request_is_done(const enum request_state st, bool* errored)
+{
+	if (st >= request_error && errored != 0)
+		*errored = true;
+	return st >= request_done;
+}
+
+void
 request_close(struct request_parser* p)
 {
 	// nada que hacer

@@ -1,18 +1,23 @@
 /**
- * request.c -- parser del request de SMTP
+ * data.c -- parser del data SMTP
  */
 #include "data.h"
 
 #include <arpa/inet.h>
 
-//////////////////////////////////////////////////////////////////////////////
-extern void
+void
 data_parser_init(struct data_parser* p)
 {
-	p->state = data_crlf;
+	p->state = data_data;
 }
 
-extern enum data_state
+void
+data_parser_buffer_init(struct data_parser* p, uint8_t* b, size_t s)
+{
+	buffer_init(&p->data, s, b);
+}
+
+enum data_state
 data_parser_feed(struct data_parser* p, const uint8_t c)
 {
 	enum data_state next;
@@ -22,7 +27,7 @@ data_parser_feed(struct data_parser* p, const uint8_t c)
 			if (c == '\r') {
 				next = data_cr;
 			} else {
-				buffer_write(p->output_buffer, c);
+				buffer_write(&p->data, c);
 				next = data_data;
 			}
 		} break;
@@ -31,8 +36,8 @@ data_parser_feed(struct data_parser* p, const uint8_t c)
 			if (c == '\n') {
 				next = data_crlf;
 			} else {
-				buffer_write(p->output_buffer, '\r');
-				buffer_write(p->output_buffer, c);
+				buffer_write(&p->data, '\r');
+				buffer_write(&p->data, c);
 				next = data_data;
 			}
 		} break;
@@ -41,9 +46,9 @@ data_parser_feed(struct data_parser* p, const uint8_t c)
 			if (c == '.') {
 				next = data_crlfdot;
 			} else {
-				buffer_write(p->output_buffer, '\r');
-				buffer_write(p->output_buffer, '\n');
-				buffer_write(p->output_buffer, c);
+				buffer_write(&p->data, '\r');
+				buffer_write(&p->data, '\n');
+				buffer_write(&p->data, c);
 				next = data_data;
 			}
 		} break;
@@ -52,10 +57,10 @@ data_parser_feed(struct data_parser* p, const uint8_t c)
 			if (c == '\r') {
 				next = data_crlfdotcr;
 			} else {
-				buffer_write(p->output_buffer, '\r');
-				buffer_write(p->output_buffer, '\n');
-				buffer_write(p->output_buffer, '.');
-				buffer_write(p->output_buffer, c);
+				buffer_write(&p->data, '\r');
+				buffer_write(&p->data, '\n');
+				buffer_write(&p->data, '.');
+				buffer_write(&p->data, c);
 				next = data_data;
 			}
 		} break;
@@ -64,11 +69,11 @@ data_parser_feed(struct data_parser* p, const uint8_t c)
 			if (c == '\n') {
 				next = data_done;
 			} else {
-				buffer_write(p->output_buffer, '\r');
-				buffer_write(p->output_buffer, '\n');
-				buffer_write(p->output_buffer, '.');
-				buffer_write(p->output_buffer, '\r');
-				buffer_write(p->output_buffer, c);
+				buffer_write(&p->data, '\r');
+				buffer_write(&p->data, '\n');
+				buffer_write(&p->data, '.');
+				buffer_write(&p->data, '\r');
+				buffer_write(&p->data, c);
 				next = data_data;
 			}
 		} break;
@@ -82,13 +87,13 @@ data_parser_feed(struct data_parser* p, const uint8_t c)
 	return p->state = next;
 }
 
-extern bool
+bool
 data_is_done(const enum data_state st)
 {
 	return st >= data_done;
 }
 
-extern enum data_state
+enum data_state
 data_consume(buffer* b, struct data_parser* p)
 {
 	enum data_state st = p->state;
@@ -96,14 +101,14 @@ data_consume(buffer* b, struct data_parser* p)
 	while (buffer_can_read(b)) {
 		const uint8_t c = buffer_read(b);
 		st = data_parser_feed(p, c);
-		if (data_is_done(st)) {
+		if (data_is_done(st))
 			break;
-		}
 	}
+
 	return st;
 }
 
-extern void
+void
 data_close(struct data_parser* p)
 {
 	// nada que hacer
