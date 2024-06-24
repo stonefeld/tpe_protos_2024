@@ -110,45 +110,113 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			}
 		} break;
 
-		case request_ehlo_sep: {
-			switch (c) {
-				case ' ':
-				case '\t': {
-					next = request_ehlo_sep;
-				} break;
-
-				case '\r': {
-					next = request_cr;
-					p->command = request_command_ehlo;
-				} break;
-
-				default: {
-					next = request_ehlo_domain;
-					p->i = 0;
-					p->request->domain[p->i++] = c;
-				} break;
-			}
-		} break;
-
-		case request_ehlo_domain: {
-			switch (c) {
-				case '\r': {
-					next = request_cr;
-					p->command = request_command_ehlo;
-				} break;
-
-				default: {
-					next = request_ehlo_domain;
-					p->request->domain[p->i++] = c;
-				} break;
-			}
-		} break;
-
 		case request_verb_m: {
 			switch (c) {
 				case 'a':
 				case 'A': {
 					next = request_verb_ma;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_ma: {
+			switch (c) {
+				case 'i':
+				case 'I': {
+					next = request_verb_mai;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mai: {
+			switch (c) {
+				case 'l':
+				case 'L': {
+					next = request_verb_mail;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mail: {
+			switch (c) {
+				case ' ': {
+					next = request_verb_mail_;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mail_: {
+			switch (c) {
+				case 'f':
+				case 'F': {
+					next = request_verb_mail_f;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mail_f: {
+			switch (c) {
+				case 'r':
+				case 'R': {
+					next = request_verb_mail_fr;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mail_fr: {
+			switch (c) {
+				case 'o':
+				case 'O': {
+					next = request_verb_mail_fro;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mail_fro: {
+			switch (c) {
+				case 'm':
+				case 'M': {
+					next = request_verb_mail_from;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_mail_from: {
+			switch (c) {
+				case ':': {
+					next = request_mail_from_sep;
 				} break;
 
 				default: {
@@ -170,11 +238,126 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			}
 		} break;
 
+		case request_verb_rc: {
+			switch (c) {
+				case 'p':
+				case 'P': {
+					next = request_verb_rcp;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_rcp: {
+			switch (c) {
+				case 't':
+				case 'T': {
+					next = request_verb_rcpt;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_rcpt: {
+			switch (c) {
+				case ' ': {
+					next = request_verb_rcpt_;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_rcpt_: {
+			switch (c) {
+				case 't':
+				case 'T': {
+					next = request_verb_rcpt_t;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_rcpt_t: {
+			switch (c) {
+				case 'o':
+				case 'O': {
+					next = request_verb_rcpt_to;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_rcpt_to: {
+			switch (c) {
+				case ':': {
+					next = request_rcpt_to_sep;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
 		case request_verb_d: {
 			switch (c) {
 				case 'a':
 				case 'A': {
 					next = request_verb_da;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_da: {
+			switch (c) {
+				case 't':
+				case 'T': {
+					next = request_verb_dat;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_dat: {
+			switch (c) {
+				case 'a':
+				case 'A': {
+					next = request_verb_data;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_data: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_data;
 				} break;
 
 				default: {
@@ -231,6 +414,108 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_ehlo_sep: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_ehlo_sep;
+				} break;
+
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_ehlo;
+				} break;
+
+				default: {
+					next = request_ehlo_domain;
+					p->i = 0;
+					p->request->domain[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_ehlo_domain: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_ehlo;
+				} break;
+
+				default: {
+					next = request_ehlo_domain;
+					p->request->domain[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_mail_from_sep: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_mail_from_sep;
+				} break;
+
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_mail;
+				} break;
+
+				default: {
+					next = request_mail_from_sender;
+					p->i = 0;
+					p->request->arg1[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_mail_from_sender: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_mail;
+				} break;
+
+				default: {
+					next = request_mail_from_sender;
+					p->request->arg1[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_rcpt_to_sep: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_rcpt_to_sep;
+				} break;
+
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_rcpt;
+				} break;
+
+				default: {
+					next = request_rcpt_to_recipient;
+					p->i = 0;
+					p->request->arg1[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_rcpt_to_recipient: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_rcpt;
+				} break;
+
+				default: {
+					next = request_rcpt_to_recipient;
+					p->request->arg1[p->i++] = c;
 				} break;
 			}
 		} break;

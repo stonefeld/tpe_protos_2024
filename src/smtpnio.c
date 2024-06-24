@@ -338,13 +338,13 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
-			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "MAIL FROM: <mail@mail.com>"
-			if (strcasecmp(state->request_parser.request->verb, "mail from:") == 0) {
-				strcpy(state->mailfrom, state->request_parser.request->arg1);
+			if (state->request_parser.command == request_command_mail) {
 				ret = MAIL_FROM_WRITE;
-				strcpy((char*)ptr, "250 Mail from received\r\n");
-				buffer_write_adv(&state->write_buffer, 24);
-			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				char s[] = "250 Mail from received - %s\r\n";
+				strcpy(state->mailfrom, state->request_parser.request->arg1);
+				sprintf((char*)ptr, s, state->mailfrom);
+				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
@@ -386,13 +386,13 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
-			// TODO: PARSER PARA AGARRAR EL MAIL DESDE "RCPT TO: <mail@mail.com>"
-			if (strcasecmp(state->request_parser.request->verb, "rcpt to:") == 0) {
-				strcpy(state->rcptto, state->request_parser.request->arg1);
+			if (state->request_parser.command == request_command_rcpt) {
 				ret = RCPT_TO_WRITE;
-				strcpy((char*)ptr, "250 Rcpt to received\r\n");
-				buffer_write_adv(&state->write_buffer, 22);
-			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+				char s[] = "250 Rcpt to received - %s\r\n";
+				strcpy(state->rcptto, state->request_parser.request->arg1);
+				sprintf((char*)ptr, s, state->rcptto);
+				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
@@ -434,12 +434,11 @@ data_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
-			// TODO: PARSER PARA FIJARSE SI TERMINA EN <CR><LF>.<CR><LF> Y AGARRAR LA INFO DEL MAIL
-			if (strcasecmp(state->request_parser.request->verb, "data") == 0) {
+			if (state->request_parser.command == request_command_data) {
 				ret = DATA_WRITE;
 				strcpy((char*)ptr, "354 End data with <CR><LF>.<CR><LF>\r\n");
 				buffer_write_adv(&state->write_buffer, 37);
-			} else if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);

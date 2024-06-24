@@ -62,6 +62,12 @@ enum request_state
 	request_ehlo_sep,
 	request_ehlo_domain,
 
+	request_mail_from_sep,
+	request_mail_from_sender,
+
+	request_rcpt_to_sep,
+	request_rcpt_to_recipient,
+
 	request_cr,
 
 	// apartir de aca están done
