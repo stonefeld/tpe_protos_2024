@@ -47,13 +47,13 @@ main(int argc, char** argv)
 	selector_status ss = SELECTOR_SUCCESS;
 	fd_selector selector = NULL;
 
-	struct sockaddr_in addr;
+	struct sockaddr_in6 addr;
 	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(args.smtp_port);
+	addr.sin6_family = AF_INET6;
+	addr.sin6_addr = in6addr_any;
+	addr.sin6_port = htons(args.smtp_port);
 
-	const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	const int server = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 	if (server < 0) {
 		err_msg = "unable to create socket";
 		goto finally;
@@ -63,6 +63,7 @@ main(int argc, char** argv)
 
 	// man 7 ip. no importa reportar nada si falla.
 	setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+	setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 0 }, sizeof(int));
 
 	if (bind(server, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
 		err_msg = "unable to bind socket";

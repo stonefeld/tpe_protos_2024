@@ -60,13 +60,6 @@ usage(const char* progname)
 	        "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
 			"   -T               Apaga las transformaciones.\n"
 	        "   -v               Imprime información sobre la versión versión y termina.\n"
-	        "\n"
-	        "   --doh-ip    <ip>    \n"
-	        "   --doh-port  <port>  XXX\n"
-	        "   --doh-host  <host>  XXX\n"
-	        "   --doh-path  <host>  XXX\n"
-	        "   --doh-query <host>  XXX\n"
-
 	        "\n",
 	        progname);
 	exit(1);
@@ -85,12 +78,6 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 
 	args->transform_enabled = true;
 
-	args->doh.host = "localhost";
-	args->doh.ip = "127.0.0.1";
-	args->doh.port = 8053;
-	args->doh.path = "/getnsrecord";
-	args->doh.query = "?dns=";
-
 	int c;
 	int nusers = 0;
 
@@ -102,7 +89,7 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 			{ "doh-query", required_argument, 0, 0xD005 }, { 0, 0, 0, 0 }
 		};
 
-		c = getopt_long(argc, argv, "hl:L:Tp:P:u:v", long_options, &option_index);
+		c = getopt_long(argc, argv, "hT:p:P:u:v", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -146,7 +133,7 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 				exit(0);
 			} break;
 
-			case 0xD001: {
+			/* case 0xD001: {
 				args->doh.ip = optarg;
 			} break;
 
@@ -164,7 +151,7 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 
 			case 0xD005: {
 				args->doh.query = optarg;
-			} break;
+			} break; */
 
 			default: {
 				fprintf(stderr, "unknown argument %d.\n", c);

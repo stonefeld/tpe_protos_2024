@@ -55,7 +55,6 @@ struct smtp
 	struct request request;
 	struct request_parser request_parser;
 
-	uint8_t raw_data_buff[2048];
 	struct data_parser data_parser;
 
 	/** buffers */
@@ -66,7 +65,6 @@ struct smtp
 
 	char mailfrom[255];
 	char rcptto[255];
-	char data[2048];
 
 	int file_fd;
 };
@@ -81,7 +79,6 @@ static unsigned read_status(struct selector_key* key,
                             unsigned current_state,
                             unsigned (*read_process)(struct selector_key* key, struct smtp* state));
 static void request_read_init(const unsigned state, struct selector_key* key);
-static void mail_info_read_init(const unsigned state, struct selector_key* key);
 static void data_buffer_init(const unsigned state, struct selector_key* key);
 
 static unsigned greeting_write(struct selector_key* key);
@@ -467,15 +464,7 @@ data_buffer_init(const unsigned state, struct selector_key* key)
 {
 	struct smtp* s = ATTACHMENT(key);
 	struct data_parser* p = &s->data_parser;
-	data_parser_buffer_init(p, s->raw_data_buff, N(s->raw_data_buff));
 	data_parser_init(p);
-}
-
-static void
-mail_info_read_init(const unsigned state, struct selector_key* key)
-{
-	// struct data_parser* p = &ATTACHMENT(key)->data_parser;
-	// data_parser_init(p);
 }
 
 static unsigned
@@ -576,7 +565,6 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = MAIL_INFO_READ,
-	    .on_arrival = mail_info_read_init,
 	    .on_read_ready = mail_info_read,
 	},
 	{

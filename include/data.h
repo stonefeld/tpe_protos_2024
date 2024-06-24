@@ -41,14 +41,13 @@ enum data_state
 
 struct data_parser
 {
-	buffer data;
+	buffer data_buffer;
+	uint8_t raw_data_buffer[2048];
 	enum data_state state;
 };
 
 /** inicializa el parser */
 void data_parser_init(struct data_parser* p);
-
-void data_parser_buffer_init(struct data_parser* p, uint8_t* b, size_t s);
 
 /** entrega un byte al parser. retorna true si se llego al final  */
 enum data_state data_parser_feed(struct data_parser* p, uint8_t c);
