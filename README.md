@@ -61,3 +61,6 @@ CC=gcc make clean all
 - Conexion al protocolo de Supervision:
   - `nc -C -u localhost 6969`
 
+## Ubicación de archivos
+El archivo correspondiente al informe se encuentra en la raiz de proyecto
+El directorio generado 'mails' se crea en la raiz del proyecto
