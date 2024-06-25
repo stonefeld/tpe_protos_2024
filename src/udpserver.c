@@ -37,7 +37,7 @@ typedef struct client {
 } client_t;
 
 client_t *clients = NULL;
-const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener los mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n";
+const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener la cantidad de mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n";
 
 client_t *find_client(struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
     client_t *current = clients;
