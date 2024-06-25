@@ -25,6 +25,7 @@
 #include <sys/socket.h>  // socket
 #include <sys/types.h>   // socket
 #include <unistd.h>
+#include <arpa/inet.h>
 
 #define RESPONSE_SIZE 16
 
@@ -145,23 +146,33 @@ udp_read_handler(struct selector_key *key)
     }
     printf("\n");
 
+
+    printf("Client address: ");
+    char client_address_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &(client_addr.sin_addr), client_address_str, INET6_ADDRSTRLEN);
+    printf("%s\n", client_address_str);
+
+    // Validación adicional de la dirección del cliente
+    if (strcmp(client_address_str, "::") == 0) {
+        fprintf(stderr, "Invalid client address received: %s\n", client_address_str);
+        return;
+    }
     
     // me esta tirando un error
 
-    // ssize_t sent = sendto(key->fd, response,RESPONSE_SIZE, 0,
-    //                       (struct sockaddr *)&client_addr, client_addr_len);
-    // if (sent < 0) {
-    //     perror("sendto");
-    //     return;
-    // }
+    ssize_t sent = sendto(key->fd, response,RESPONSE_SIZE, 0,
+                          (struct sockaddr *)&client_addr, client_addr_len);
+    if (sent < 0) {
+        printf("Hay error y sent es: %ld\n",sent);
+        perror("sendto");
+        return;
+    }
 
 
     // Logica de los paquetes udp
 }
 
-int
-main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
     struct socks5args args;
     parse_args(argc, argv, &args);
 
@@ -171,11 +182,11 @@ main(int argc, char** argv)
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-	struct sockaddr_in6 addr;
-	memset(&addr, 0, sizeof(addr));
-	addr.sin6_family = AF_INET6;
-	addr.sin6_addr = in6addr_any;
-	addr.sin6_port = htons(args.smtp_port);
+    struct sockaddr_in6 addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr = in6addr_any;
+    addr.sin6_port = htons(args.smtp_port);
 
     const int server = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
     const int server_6969 = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
@@ -191,9 +202,8 @@ main(int argc, char** argv)
 
     fprintf(stdout, "Listening on TCP port %d\n", args.smtp_port);
 
-	// man 7 ip. no importa reportar nada si falla.
-	setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
-	setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 0 }, sizeof(int));
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+    setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 0 }, sizeof(int));
 
     if (bind(server, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         err_msg = "unable to bind socket";
@@ -221,10 +231,6 @@ main(int argc, char** argv)
         goto finally;
     }
 
-    // No uso listen para UDP
-
-    // registrar sigterm es útil para terminar el programa normalmente.
-    // esto ayuda mucho en herramientas como valgrind.
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT, sigterm_handler);
 
@@ -261,13 +267,13 @@ main(int argc, char** argv)
     const struct fd_handler smtp = {
         .handle_read = smtp_passive_accept,
         .handle_write = NULL,
-        .handle_close = NULL,  // nada que liberar
+        .handle_close = NULL,
     };
 
     const struct fd_handler udp = {
         .handle_read = udp_read_handler,
         .handle_write = NULL,
-        .handle_close = NULL,  // nada que liberar
+        .handle_close = NULL,
     };
 
     ss = selector_register(selector, server, &smtp, OP_READ, NULL);
@@ -277,7 +283,6 @@ main(int argc, char** argv)
         goto finally;
     }
 
-    // Registrar el socket UDP
     ss = selector_register(selector, server_6969, &udp, OP_READ, NULL);
 
     if (ss != SELECTOR_SUCCESS) {
@@ -299,8 +304,6 @@ main(int argc, char** argv)
     }
 
     int ret = 0;
-
-    // socksv5_pool_destroy();
 
 finally_udp:
     if (server_6969 >= 0) {
