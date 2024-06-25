@@ -10,6 +10,7 @@ void
 request_parser_init(struct request_parser* p)
 {
 	p->state = request_verb;
+	p->command = request_command_noop;
 	p->i = 0;
 	memset(p->request, 0, sizeof(*(p->request)));
 }
@@ -532,9 +533,21 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			}
 		} break;
 
-		case request_done:
-		case request_error: {
+		case request_done: {
 			next = p->state;
+		} break;
+
+		case request_error: {
+			p->command = request_command_unknown;
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
 		} break;
 
 		default: {
@@ -553,8 +566,9 @@ request_consume(buffer* b, struct request_parser* p, bool* errored)
 	while (buffer_can_read(b)) {
 		const uint8_t c = buffer_read(b);
 		st = request_parser_feed(p, c);
-		if (request_is_done(st, errored))
-			break;
+		// TODO: check this shi
+		// if (request_is_done(st, errored))
+		// 	break;
 	}
 
 	return st;

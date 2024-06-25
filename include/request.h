@@ -82,7 +82,6 @@ enum request_state
 
 struct request
 {
-	char verb[10];
 	char arg1[32];
 	char domain[32];
 };

@@ -106,14 +106,6 @@ struct status global_status = { 0 };
 static int historic_users = 0;
 static int current_users = 0;
 
-int get_historic_users(){
-	return historic_users;
-}
-
-int get_current_users(){
-	return current_users;
-}
-
 static unsigned
 write_status(struct selector_key* key, unsigned current_state, unsigned next_state)
 {
@@ -247,7 +239,7 @@ failed_connection_read_process(struct selector_key* key, struct smtp* state)
 			size_t count;
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
-			if (strcasecmp(state->request_parser.request->verb, "quit") == 0) {
+			if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
@@ -293,7 +285,7 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 
 			if (state->request_parser.command == request_command_ehlo) {
 				ret = EHLO_WRITE;
-				char s[] = "250 EHLO received - %s\n\n";
+				char s[] = "250 EHLO received - %s\r\n";
 				sprintf((char*)ptr, s, state->request_parser.request->domain);
 				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 			} else if (state->request_parser.command == request_command_quit) {
@@ -322,7 +314,10 @@ ehlo_read(struct selector_key* key)
 static unsigned
 ehlo_write(struct selector_key* key)
 {
-	return write_status(key, EHLO_WRITE, MAIL_FROM_READ);
+	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+	if (p->command == request_command_ehlo)
+		return write_status(key, EHLO_WRITE, MAIL_FROM_READ);
+	return write_status(key, EHLO_WRITE, EHLO_READ);
 }
 
 static unsigned
@@ -370,7 +365,10 @@ mail_from_read(struct selector_key* key)
 static unsigned
 mail_from_write(struct selector_key* key)
 {
-	return write_status(key, MAIL_FROM_WRITE, RCPT_TO_READ);
+	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+	if (p->command == request_command_mail)
+		return write_status(key, MAIL_FROM_WRITE, RCPT_TO_READ);
+	return write_status(key, MAIL_FROM_WRITE, MAIL_FROM_READ);
 }
 
 static unsigned
@@ -418,7 +416,10 @@ rcpt_to_read(struct selector_key* key)
 static unsigned
 rcpt_to_write(struct selector_key* key)
 {
-	return write_status(key, RCPT_TO_WRITE, DATA_READ);
+	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+	if (p->command == request_command_rcpt)
+		return write_status(key, RCPT_TO_WRITE, DATA_READ);
+	return write_status(key, RCPT_TO_WRITE, RCPT_TO_READ);
 }
 
 static unsigned
@@ -464,7 +465,10 @@ data_read(struct selector_key* key)
 static unsigned
 data_write(struct selector_key* key)
 {
-	return write_status(key, DATA_WRITE, MAIL_INFO_READ);
+	struct request_parser* p = &ATTACHMENT(key)->request_parser;
+	if (p->command == request_command_data)
+		return write_status(key, DATA_WRITE, MAIL_INFO_READ);
+	return write_status(key, DATA_WRITE, DATA_READ);
 }
 
 static void
@@ -685,16 +689,13 @@ smtp_passive_accept(struct selector_key* key)
 	} else {
 		state->stm.initial = FAILED_CONNECTION_WRITE;
 	}
+
 	state->stm.max_state = ERROR;
 	state->stm.states = client_statbl;
 	stm_init(&state->stm);
 
 	buffer_init(&state->read_buffer, N(state->raw_buff_read), state->raw_buff_read);
 	buffer_init(&state->write_buffer, N(state->raw_buff_write), state->raw_buff_write);
-
-	/* char* hello = "220 localhost SMTP\n";
-	memcpy(&state->raw_buff_write, hello, strlen(hello));
-	buffer_write_adv(&state->write_buffer, strlen(hello)); */
 
 	fprintf(stdout, "New user connected\n");
 	fprintf(stdout, "Current users: %d\n", ++current_users);
@@ -714,4 +715,16 @@ fail:
 		close(client);
 
 	smtp_destroy(state);
+}
+
+int
+get_historic_users()
+{
+	return historic_users;
+}
+
+int
+get_current_users()
+{
+	return current_users;
 }
