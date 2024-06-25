@@ -72,10 +72,10 @@ enum request_state
 
 	request_cr,
 
-	// apartir de aca están done
+	// a partir de aca están done
 	request_done,
 
-	// y apartir de aca son considerado con error
+	// y a partir de aca son considerado con error
 	request_error,
 
 	/* request_error_unknown_verb,

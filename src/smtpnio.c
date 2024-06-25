@@ -8,12 +8,14 @@
 
 #include <arpa/inet.h>
 #include <assert.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -58,7 +60,7 @@ struct smtp
 	struct data_parser data_parser;
 
 	/** buffers */
-	uint8_t raw_buff_read[2048], raw_buff_write[2048], raw_buff_file[2048];  // TODO: Fix this
+	uint8_t raw_buff_read[2048], raw_buff_write[2048], raw_buff_file[2048];
 	buffer read_buffer, write_buffer, file_buffer;
 
 	bool is_data;
@@ -285,7 +287,7 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 
 			if (state->request_parser.command == request_command_ehlo) {
 				ret = EHLO_WRITE;
-				char s[] = "250 EHLO received - %s\r\n";
+				char s[] = "250-localhost\r\n250-PIPELINING\r\n250 SIZE 10240000\r\n";
 				sprintf((char*)ptr, s, state->request_parser.request->domain);
 				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 			} else if (state->request_parser.command == request_command_quit) {
@@ -439,6 +441,28 @@ data_read_process(struct selector_key* key, struct smtp* state)
 				ret = DATA_WRITE;
 				strcpy((char*)ptr, "354 End data with <CR><LF>.<CR><LF>\r\n");
 				buffer_write_adv(&state->write_buffer, 37);
+
+				// TODO: revisar si hay mejor lugar para poner esto
+				char file_name[100] = "mails/";
+				strcat(file_name, ATTACHMENT(key)->rcptto);
+
+				struct stat st;
+
+				if (stat("mails/", &st) == -1) {
+					if (mkdir("mails/", 0777) == -1) {
+						fprintf(stderr, "Error creating directory\n");
+						abort();
+					}
+				}
+
+				int fd = open(file_name, O_CREAT | O_WRONLY, 0777);
+
+				if (fd == -1) {
+					fprintf(stderr, "Error creating file\n");
+					abort();
+				}
+
+				state->file_fd = fd;
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
@@ -479,12 +503,25 @@ data_buffer_init(const unsigned state, struct selector_key* key)
 	data_parser_init(p);
 }
 
+static void
+mail_info_read_close(const unsigned state, struct selector_key* key)
+{
+	struct smtp* s = ATTACHMENT(key);
+	close(s->file_fd);
+}
+
 static unsigned
 mail_info_read_process(struct selector_key* key, struct smtp* state)
 {
 	unsigned ret = MAIL_INFO_READ;
 
+	struct smtp* s = ATTACHMENT(key);
+	buffer_reset(&s->data_parser.data_buffer);
+
 	int st = data_consume(&state->read_buffer, &state->data_parser);
+
+	// write to file_fd
+	data_write_to_file(&s->data_parser, s->file_fd);
 
 	if (data_is_done(st)) {
 		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
@@ -581,14 +618,11 @@ static const struct state_definition client_statbl[] = {
 	},
 	{
 	    .state = MAIL_INFO_WRITE,
+	    .on_departure = mail_info_read_close,
 	    .on_write_ready = mail_info_write,
 	},
-	{
-	    .state = DONE,
-	},
-	{
-	    .state = ERROR,
-	},
+	{ .state = DONE },
+	{ .state = ERROR },
 };
 
 /**
