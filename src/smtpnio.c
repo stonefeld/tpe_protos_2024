@@ -805,8 +805,9 @@ get_current_bytes()
 int
 get_current_mails()
 {
-	return transferred_bytes;
+	return mails_sent;
 }
+
 bool
 get_current_status()
 {
