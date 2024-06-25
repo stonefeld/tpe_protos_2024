@@ -1,3 +1,4 @@
+
 #include "udpserver.h"
 #include "args.h"
 #include "selector.h"
@@ -16,26 +17,48 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netdb.h>       // for getnameinfo
+#include <strings.h>     // for strncasecmp
 
 #define RESPONSE_SIZE 16
+#define BUFFER_SIZE 1024
 
-/*
-* RESPONSE:
-*   Protocol signature - 2 bytes - 0xFF 0xFE 
-*   Versión del protocolo - 1 byte -  0x00
-*   Identificador del request - 2 bytes
-*   Status - 1 byte
-*       Success - 0x00
-*   Errors:
-*       Auth failed - 0x01
-*       Invalid version - 0x02
-*       Invalid command - 0x03
-*       Invalid request (length) - 0x04
-*       Unexpected error - 0x05
-*       0x06 - 0xFF saved for future errors
-*   Cantidad - (uint64_t) 8 bytes unsigned en Big Endian (Network Order)
-*   Booleano (0x00 TRUE - 0x01 FALSE) - 1 byte
-*/
+
+enum client_state {
+    STATE_INIT,
+    STATE_WAIT_USERNAME,
+    STATE_WAIT_PASSWORD,
+    STATE_AUTH_SUCCESS,
+    STATE_AUTH_FAILED
+};
+
+typedef struct client {
+    struct sockaddr_storage client_addr;
+    socklen_t client_addr_len;
+    enum client_state state;
+    struct client *next;
+} client_t;
+
+client_t *clients = NULL;
+
+client_t *find_client(struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
+    client_t *current = clients;
+    while (current != NULL) {
+        if (current->client_addr_len == client_addr_len && memcmp(&current->client_addr, client_addr, client_addr_len) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+void add_client(struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
+    client_t *new_client = (client_t *)malloc(sizeof(client_t));
+    memcpy(&new_client->client_addr, client_addr, client_addr_len);
+    new_client->client_addr_len = client_addr_len;
+    new_client->state = STATE_INIT;
+    new_client->next = clients;
+    clients = new_client;
+}
 
 void uint64_to_big_endian(uint64_t value, uint8_t *buffer) {
     buffer[0] = (value >> 56) & 0xFF;
@@ -48,9 +71,34 @@ void uint64_to_big_endian(uint64_t value, uint8_t *buffer) {
     buffer[7] = value & 0xFF;
 }
 
+void handle_authentication(client_t *client, char *buffer, ssize_t received, int fd, struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
+    buffer[strcspn(buffer, "\r\n")] = '\0';
+
+    if (client->state == STATE_WAIT_USERNAME) {
+        if (strncasecmp(buffer, "user", received) == 0) {
+            client->state = STATE_WAIT_PASSWORD;
+            const char *response = "Ingrese contraseña: ";
+            sendto(fd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_addr_len);
+        } else {
+            const char *response = "Usuario inexistente. Ingrese usuario: ";
+            sendto(fd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_addr_len);
+        }
+    } else if (client->state == STATE_WAIT_PASSWORD) {
+        if (strncasecmp(buffer, "user", received) == 0) {
+            client->state = STATE_AUTH_SUCCESS;
+            const char *response = "Acceso concedido. Puede escribir los comandos.\n";
+            sendto(fd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_addr_len);
+        } else {
+            client->state = STATE_WAIT_USERNAME;
+            const char *response = "Contraseña incorrecta. Ingrese usuario: ";
+            sendto(fd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_addr_len);
+        }
+    }
+}
+
 // Manejador de lectura para el socket UDP
 void udp_read_handler(struct selector_key *key) {
-    char buffer[1024];
+    char buffer[BUFFER_SIZE];
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     ssize_t received = recvfrom(key->fd, buffer, sizeof(buffer) - 1, 0,
@@ -60,80 +108,64 @@ void udp_read_handler(struct selector_key *key) {
         return;
     }
     buffer[received] = '\0';
-    // printf("UDP data: %s\n", buffer);
 
-    uint8_t response[RESPONSE_SIZE]; // 2 + 1 + 2 + 1 + 8 + 1 = 15 bytes + 1 byte de padding
-    size_t offset = 0;
-
-    // Protocol signature
-    response[offset++] = 0xFF;
-    response[offset++] = 0xFE;
-
-    // Versión del protocolo
-    response[offset++] = 0x00;
-
-    // Identificador del request (por simplicidad, aquí usamos 0x0001)
-    response[offset++] = 0x00;
-    response[offset++] = 0x01;
-
-    // Status (Success y manejar errores)
-    response[offset++] = 0x00;
-
-    // Cantidad (traer los datos posta Big Endian)
-    uint64_t cantidad;
-    char rta[128];  // Buffer para almacenar la cadena formateada
-    switch (buffer[0]) {
-    case 'a':
-        cantidad = get_historic_users();
-        snprintf(rta, sizeof(rta), "Cantidad historica %ld\r\n", cantidad);
-        break;
-
-    case 'b':
-        cantidad = get_current_users();
-        snprintf(rta, sizeof(rta), "Cantidad actual %ld\r\n", cantidad);
-        break;
-    default:
-        cantidad = 1234; // valor falopa para testear
-        break;
+    client_t *client = find_client(&client_addr, client_addr_len);
+    if (client == NULL) {
+        add_client(&client_addr, client_addr_len);
+        client = find_client(&client_addr, client_addr_len);
     }
-    // printf("Cant: %ld\n", cantidad);
-    uint64_to_big_endian(cantidad, &response[offset]);
-    offset += 8;
 
-    response[offset++] = 0x00;
-    // Booleano (TRUE)
-    printf("response: ");
-    for (size_t i = 0; i < offset; i++) {
-        printf("%d ", response[i]);
-    }
-    printf("\n");
-
-    printf("Client address: ");
-    char client_address_str[INET6_ADDRSTRLEN];
-    void *addr;
-    if (client_addr.ss_family == AF_INET) {
-        struct sockaddr_in *ipv4 = (struct sockaddr_in *)&client_addr;
-        addr = &(ipv4->sin_addr);
-    } else { // AF_INET6
-        struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)&client_addr;
-        addr = &(ipv6->sin6_addr);
-    }
-    if (inet_ntop(client_addr.ss_family, addr, client_address_str, sizeof(client_address_str)) == NULL) {
-        perror("inet_ntop");
-        return;
-    }
-    printf("%s\n", client_address_str);
-
-    // Validación adicional de la dirección del cliente (puedes ajustar según tus necesidades)
-    // Aquí no se está validando específicamente, puedes agregar tu lógica de validación aquí.
-
-    ssize_t sent = sendto(key->fd, rta, strlen(rta), 0,
-                          (struct sockaddr *)&client_addr, client_addr_len);
-    if (sent < 0) {
-        printf("Hay error y sent es: %ld\n", sent);
-        perror("sendto");
+    if (client->state == STATE_INIT) {
+        client->state = STATE_WAIT_USERNAME;
+        const char *response = "Ingrese usuario: ";
+        sendto(key->fd, response, strlen(response), 0, (struct sockaddr *)&client_addr, client_addr_len);
         return;
     }
 
-    // Lógica adicional de los paquetes UDP
+    if (client->state == STATE_WAIT_USERNAME || client->state == STATE_WAIT_PASSWORD) {
+        handle_authentication(client, buffer, received, key->fd, &client_addr, client_addr_len);
+        return;
+    }
+
+    if (client->state == STATE_AUTH_SUCCESS) {
+        uint8_t response[RESPONSE_SIZE]; 
+        size_t offset = 0;
+
+        response[offset++] = 0xFF;
+        response[offset++] = 0xFE;
+
+        response[offset++] = 0x00;
+
+        response[offset++] = 0x00;
+        response[offset++] = 0x01;
+
+        response[offset++] = 0x00;
+
+        uint64_t cantidad;
+        char rta[BUFFER_SIZE];
+        switch (buffer[0]) {
+        case 'a':
+            cantidad = get_historic_users();
+            snprintf(rta, sizeof(rta), "Cantidad historica %ld\r\n", cantidad);
+            break;
+
+        case 'b':
+            cantidad = get_current_users();
+            snprintf(rta, sizeof(rta), "Cantidad actual %ld\r\n", cantidad);
+            break;
+        default:
+            cantidad = 1234;
+            break;
+        }
+        uint64_to_big_endian(cantidad, &response[offset]);
+        offset += 8;
+
+        response[offset++] = 0x00;
+        
+        ssize_t sent = sendto(key->fd, rta, strlen(rta), 0, (struct sockaddr *)&client_addr, client_addr_len);
+        if (sent < 0) {
+            perror("sendto");
+            return;
+        }
+    }
 }
