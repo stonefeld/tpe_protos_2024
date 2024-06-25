@@ -39,7 +39,7 @@ typedef struct client
 } client_t;
 
 client_t *clients = NULL;
-const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener la cantidad de mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n - Ingrese 'status' para ver el estado de las transformaciones\n - Ingrese 'transon' para activar las transformaciones\n - Ingrese 'transoff' para desactivar las transformaciones\n - Ingrese 'max <cant>' para poner una nueva cantidad de usuarios\n - Ingrese 'cant' para obtener la maxima cantidad de usuarios\n";
+const char *help = "HELP\r\n - Ingrese 'historico' para obtener el historico de usuarios conectados\r\n - Ingrese 'actual' para obtener los usuarios conectados ahora\r\n - Ingrese 'mail' para obtener la cantidad de mails enviados\r\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\r\n - Ingrese 'status' para ver el estado de las transformaciones\r\n - Ingrese 'transon' para activar las transformaciones\r\n - Ingrese 'transoff' para desactivar las transformaciones\r\n - Ingrese 'max <cant>' para poner una nueva cantidad de usuarios\r\n - Ingrese 'cant' para obtener la maxima cantidad de usuarios\r\n";
 
 client_t*
 find_client(struct sockaddr_storage* client_addr, socklen_t client_addr_len)
@@ -106,7 +106,7 @@ handle_authentication(client_t* client,
 	} else if (client->state == STATE_WAIT_PASSWORD) {
 		if (strncasecmp(buffer, "user", received) == 0) {
 			client->state = STATE_AUTH_SUCCESS;
-			char* response = "Acceso concedido. Puede escribir los comandos.\n";
+			char* response = "Acceso concedido. Puede escribir los comandos.\r\n";
 			sendto(fd, response, strlen(response), 0, (struct sockaddr*)client_addr, client_addr_len);
 		} else {
 			client->state = STATE_WAIT_USERNAME;
@@ -169,36 +169,36 @@ udp_read_handler(struct selector_key* key)
         uint64_t cantidad=0;
         char rta[BUFFER_SIZE];
 
-        if (strcasecmp(buffer, "historico\n") == 0) {
+        if (strcasecmp(buffer, "historico\r\n") == 0) {
             cantidad = get_historic_users();
-            snprintf(rta, BUFFER_SIZE, "Cantidad historica %ld\r\n\n", cantidad);
-        } else if (strcasecmp(buffer, "actual\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "Cantidad historica %ld\r\n\r\n", cantidad);
+        } else if (strcasecmp(buffer, "actual\r\n") == 0) {
             cantidad = get_current_users();
-            snprintf(rta, BUFFER_SIZE, "Cantidad actual %ld\r\n\n", cantidad);
-        }else if (strcasecmp(buffer, "bytes\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "Cantidad actual %ld\r\n\r\n", cantidad);
+        }else if (strcasecmp(buffer, "bytes\r\n") == 0) {
             cantidad = get_current_bytes();
-            snprintf(rta, BUFFER_SIZE, "Bytes transferidos %ld\r\n\n", cantidad);
-        }else if (strcasecmp(buffer, "mail\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "Bytes transferidos %ld\r\n\r\n", cantidad);
+        }else if (strcasecmp(buffer, "mail\r\n") == 0) {
             cantidad = get_current_mails();
-            snprintf(rta, BUFFER_SIZE, "Mails enviados %ld\r\n\n", cantidad);
-        }else if (strcasecmp(buffer, "cant\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "Mails enviados %ld\r\n\r\n", cantidad);
+        }else if (strcasecmp(buffer, "cant\r\n") == 0) {
             cantidad = get_cant_max_users();
-            snprintf(rta, BUFFER_SIZE, "Cantidad maxima de usuarios %ld\r\n\n", cantidad);
-        }else if (strcasecmp(buffer, "status\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "Cantidad maxima de usuarios %ld\r\n\r\n", cantidad);
+        }else if (strcasecmp(buffer, "status\r\n") == 0) {
             bool status = get_current_status();
             if(status){
-                snprintf(rta, BUFFER_SIZE, "Las transormaciones estan activadas\r\n\n");
+                snprintf(rta, BUFFER_SIZE, "Las transormaciones estan activadas\r\n\r\n");
             }else{
-                snprintf(rta, BUFFER_SIZE, "Las transormaciones estan desactivadas\r\n\n");
+                snprintf(rta, BUFFER_SIZE, "Las transormaciones estan desactivadas\r\n\r\n");
             }
-        }else if (strcasecmp(buffer, "transon\n") == 0) {
+        }else if (strcasecmp(buffer, "transon\r\n") == 0) {
             set_new_status(true);
-            snprintf(rta, BUFFER_SIZE, "Transormaciones activadas\r\n\n");
-        }else if (strcasecmp(buffer, "transoff\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "Transormaciones activadas\r\n\r\n");
+        }else if (strcasecmp(buffer, "transoff\r\n") == 0) {
             set_new_status(false);
-            snprintf(rta, BUFFER_SIZE, "Transormaciones desactivadas\r\n\n");
-        }else if (strcasecmp(buffer, "help\n") == 0) {
-            snprintf(rta, BUFFER_SIZE, "%s\r\n\n", help);
+            snprintf(rta, BUFFER_SIZE, "Transormaciones desactivadas\r\n\r\n");
+        }else if (strcasecmp(buffer, "help\r\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "%s\r\n\r\n", help);
             if ((buffer[0] == 'm' || buffer[0] == 'M') &&
                 (buffer[1] == 'a' || buffer[1] == 'A') &&
                 (buffer[2] == 'x' || buffer[2] == 'X') &&
@@ -212,18 +212,18 @@ udp_read_handler(struct selector_key* key)
                     number = atoi(number_str);
                     if (number >= 0) {
                         set_max_users(number);
-                        snprintf(rta, BUFFER_SIZE, "Nuevo número máximo de usuarios: %d\r\n\n", number);
+                        snprintf(rta, BUFFER_SIZE, "Nuevo número máximo de usuarios: %d\r\n\r\n", number);
                     } else {
-                        snprintf(rta, BUFFER_SIZE, "Error: Argumento inválido\r\n\n");
+                        snprintf(rta, BUFFER_SIZE, "Error: Argumento inválido\r\n\r\n");
                     }
                 } else {
-                    snprintf(rta, BUFFER_SIZE, "Error: Argumento inválido\r\n\n");
+                    snprintf(rta, BUFFER_SIZE, "Error: Argumento inválido\r\n\r\n");
                 }
             } else {
-                snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s", help);
+                snprintf(rta, BUFFER_SIZE, "Comando no reconocido\r\n %s", help);
             }
         }
-        
+
         ssize_t sent = sendto(key->fd, rta, strlen(rta), 0, (struct sockaddr *)&client_addr, client_addr_len);
         if (sent < 0) {
             perror("sendto");

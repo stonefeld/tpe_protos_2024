@@ -64,7 +64,7 @@ struct smtp
 	uint8_t raw_buff_read[2048], raw_buff_write[2048], raw_buff_file[2048];
 	buffer read_buffer, write_buffer, file_buffer;
 
-	bool is_data;
+	bool transformation;
 
 	char mailfrom[255];
 	struct rcpt_node* rcpt_list;
@@ -479,7 +479,7 @@ data_read_process(struct selector_key* key, struct smtp* state)
 				strcpy((char*)ptr, "354 End data with <CR><LF>.<CR><LF>\r\n");
 				buffer_write_adv(&state->write_buffer, 37);
 
-				create_mails_files(state->rcpt_list, state->mailfrom, program, transformations);
+				create_mails_files(state->rcpt_list, state->mailfrom, program, state->transformation);
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
@@ -753,7 +753,9 @@ smtp_passive_accept(struct selector_key* key)
 	}
 
 	program = (char*)key->data;
-	transformations = key->data != NULL;
+	if (transformations && key->data != NULL) {
+		state->transformation = true;
+	}
 
 	state->stm.max_state = ERROR;
 	state->stm.states = client_statbl;
@@ -824,6 +826,7 @@ set_max_users(int n)
 }
 
 int
-get_cant_max_users(){
+get_cant_max_users()
+{
 	return max_user;
 }
