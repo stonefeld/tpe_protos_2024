@@ -37,7 +37,7 @@ typedef struct client
 } client_t;
 
 client_t *clients = NULL;
-const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener la cantidad de mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n";
+const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener la cantidad de mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n - Ingrese 'status' para ver el estado de las transformaciones\n - Ingrese 'transon' para activar las transformaciones\n - Ingrese 'transoff' para desactivar las transformaciones\n - Ingrese 'maxuser <cant>' para poner una nueva cantidad de usuarios\n";
 
 client_t*
 find_client(struct sockaddr_storage* client_addr, socklen_t client_addr_len)
@@ -169,7 +169,23 @@ udp_read_handler(struct selector_key* key)
         }else if (strcasecmp(buffer, "mail\n") == 0) {
             cantidad = get_current_mails();
             snprintf(rta, BUFFER_SIZE, "Mails enviados %ld\r\n\n", cantidad);
-        } else if (strcasecmp(buffer, "help\n") == 0) {
+        }else if (strcasecmp(buffer, "status\n") == 0) {
+            bool status = get_current_status();
+            if(status){
+                snprintf(rta, BUFFER_SIZE, "Las transormaciones estan activadas\r\n\n");
+            }else{
+                snprintf(rta, BUFFER_SIZE, "Las transormaciones estan desactivadas\r\n\n");
+            }
+        }else if (strcasecmp(buffer, "transon\n") == 0) {
+            set_new_status(true);
+            snprintf(rta, BUFFER_SIZE, "Transormaciones activadas\r\n\n");
+        }else if (strcasecmp(buffer, "transoff\n") == 0) {
+            set_new_status(false);
+            snprintf(rta, BUFFER_SIZE, "Transormaciones desactivadas\r\n\n");
+        }else if (strcasecmp(buffer, "maxuser\n") == 0) {
+            set_new_status(false);
+            snprintf(rta, BUFFER_SIZE, "Transormaciones desactivadas\r\n\n");
+        }else if (strcasecmp(buffer, "help\n") == 0) {
             snprintf(rta, BUFFER_SIZE, "%s\r\n\n", help);
         } else {
             snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s",help);

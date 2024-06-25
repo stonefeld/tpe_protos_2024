@@ -13,4 +13,8 @@ int get_current_bytes();
 
 int get_current_mails();
 
+bool get_current_status();
+
+void set_new_status(bool new_status);
+
 #endif

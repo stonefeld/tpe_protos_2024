@@ -21,7 +21,6 @@
 #include <unistd.h>
 
 #define N(x)      (sizeof(x) / sizeof((x)[0]))
-#define MAX_USERS 500
 #define DOMAIN    "@smtpd.com"
 
 /** obtiene el struct (smtp *) desde la llave de selección  */
@@ -111,6 +110,8 @@ static int historic_users = 0;
 static int current_users = 0;
 static int transferred_bytes = 0;
 static int mails_sent = 0;
+static bool transformations = false;
+int max_user = 500;
 
 static int
 check_email_domain(const char* email)
@@ -751,8 +752,8 @@ smtp_passive_accept(struct selector_key* key)
 	state->client_addr_len = client_addr_len;
 	state->rcpt_list = NULL;
 
-	if (current_users < MAX_USERS) {
-		state->stm.initial = GREETING_WRITE;
+	if (current_int max_user) {
+		state->;stm.initial = GREETING_WRITE;
 	} else {
 		state->stm.initial = FAILED_CONNECTION_WRITE;
 	}
@@ -806,4 +807,18 @@ int
 get_current_mails()
 {
 	return transferred_bytes;
+}
+bool 
+get_current_status(){
+	return transformations;
+}
+
+void 
+set_new_status(bool new_status){
+	transformations=new_status;
+}
+
+void
+set_max_users(int n){
+	max_user=n;
 }

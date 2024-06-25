@@ -1,5 +1,6 @@
 #include "args.h"
 
+#include <bits/getopt_core.h>
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h> /* LONG_MIN et al */
@@ -76,7 +77,6 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 	args->mng_addr = "127.0.0.1";
 	args->mng_port = 8080;
 
-	args->transform_enabled = true;
 
 	int c;
 	int nusers = 0;
@@ -106,8 +106,8 @@ parse_args(const int argc, char** argv, struct socks5args* args)
 				args->mng_addr = optarg;
 			} break;
 
-			case 'N': {
-				args->transform_enabled = false;
+			case 'T': {
+				args->transformation_program = optarg;
 			} break;
 
 			case 'p': {

@@ -41,6 +41,6 @@
 -Conexion al servidor SMTP:
     nc -C localhost 1209
 
--Conxion al protocolo de Supervision:
-    nc -C localhost 6969
+-Conexion al protocolo de Supervision:
+    nc -u localhost 6969
 

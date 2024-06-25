@@ -28,8 +28,8 @@ struct socks5args
 	char* mng_addr;
 	unsigned short mng_port;
 
-	bool transform_enabled;
-
+	char* transformation_program;
+	
 	struct doh doh;
 	struct users users[MAX_USERS];
 };
