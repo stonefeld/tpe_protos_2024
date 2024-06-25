@@ -460,15 +460,25 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 					next = request_mail_from_sep;
 				} break;
 
-				case '\r': {
-					next = request_cr;
-					p->command = request_command_mail;
+				case '<': {
+					next = request_mail_from;
 				} break;
 
 				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_mail_from: {
+			switch (c) {
+				case '>': {
 					next = request_mail_from_sender;
-					p->i = 0;
-					p->request->arg1[p->i++] = c;
+				} break;
+
+				default: {
+					next = request_mail_from;
+					p->request->arg[p->i++] = c;
 				} break;
 			}
 		} break;
@@ -481,8 +491,7 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 				} break;
 
 				default: {
-					next = request_mail_from_sender;
-					p->request->arg1[p->i++] = c;
+					next = request_error;
 				} break;
 			}
 		} break;
@@ -494,15 +503,25 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 					next = request_rcpt_to_sep;
 				} break;
 
-				case '\r': {
-					next = request_cr;
-					p->command = request_command_rcpt;
+				case '<': {
+					next = request_rcpt_to;
 				} break;
 
 				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_rcpt_to: {
+			switch (c) {
+				case '>': {
 					next = request_rcpt_to_recipient;
-					p->i = 0;
-					p->request->arg1[p->i++] = c;
+				} break;
+
+				default: {
+					next = request_rcpt_to;
+					p->request->arg[p->i++] = c;
 				} break;
 			}
 		} break;
@@ -515,8 +534,7 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 				} break;
 
 				default: {
-					next = request_rcpt_to_recipient;
-					p->request->arg1[p->i++] = c;
+					next = request_error;
 				} break;
 			}
 		} break;

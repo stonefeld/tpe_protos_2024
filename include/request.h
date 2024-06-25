@@ -63,9 +63,11 @@ enum request_state
 	request_ehlo_domain,
 
 	request_mail_from_sep,
+	request_mail_from,
 	request_mail_from_sender,
 
 	request_rcpt_to_sep,
+	request_rcpt_to,
 	request_rcpt_to_recipient,
 
 	request_cr,
@@ -82,7 +84,7 @@ enum request_state
 
 struct request
 {
-	char arg1[32];
+	char arg[32];
 	char domain[32];
 };
 

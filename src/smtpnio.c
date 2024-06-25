@@ -336,7 +336,7 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 			if (state->request_parser.command == request_command_mail) {
 				ret = MAIL_FROM_WRITE;
 				char s[] = "250 Mail from received - %s\r\n";
-				strcpy(state->mailfrom, state->request_parser.request->arg1);
+				strcpy(state->mailfrom, state->request_parser.request->arg);
 				sprintf((char*)ptr, s, state->mailfrom);
 				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 			} else if (state->request_parser.command == request_command_quit) {
@@ -387,7 +387,7 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 			if (state->request_parser.command == request_command_rcpt) {
 				ret = RCPT_TO_WRITE;
 				char s[] = "250 Rcpt to received - %s\r\n";
-				strcpy(state->rcptto, state->request_parser.request->arg1);
+				strcpy(state->rcptto, state->request_parser.request->arg);
 				sprintf((char*)ptr, s, state->rcptto);
 				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 			} else if (state->request_parser.command == request_command_quit) {
