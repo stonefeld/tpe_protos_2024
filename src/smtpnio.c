@@ -20,8 +20,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define N(x)      (sizeof(x) / sizeof((x)[0]))
-#define DOMAIN    "@smtpd.com"
+#define N(x)   (sizeof(x) / sizeof((x)[0]))
+#define DOMAIN "@smtpd.com"
 
 /** obtiene el struct (smtp *) desde la llave de selección  */
 #define ATTACHMENT(key) ((struct smtp*)(key)->data)
@@ -70,11 +70,6 @@ struct smtp
 	struct rcpt_node* rcpt_list;
 };
 
-struct status
-{
-	int historic_connections, concurrent_connections, bytes_transfered, mails_sent;
-};
-
 static int check_email_domain(const char* email);
 
 static unsigned write_status(struct selector_key* key, unsigned current_state, unsigned next_state);
@@ -104,13 +99,12 @@ static unsigned mail_info_read_process(struct selector_key* key, struct smtp* st
 static unsigned mail_info_read(struct selector_key* key);
 static unsigned mail_info_write(struct selector_key* key);
 
-struct status global_status = { 0 };
-
 static int historic_users = 0;
 static int current_users = 0;
 static int transferred_bytes = 0;
 static int mails_sent = 0;
 static bool transformations = false;
+static char* program;
 int max_user = 500;
 
 static int
@@ -485,7 +479,7 @@ data_read_process(struct selector_key* key, struct smtp* state)
 				strcpy((char*)ptr, "354 End data with <CR><LF>.<CR><LF>\r\n");
 				buffer_write_adv(&state->write_buffer, 37);
 
-				create_mails_files(state->rcpt_list, state->mailfrom);
+				create_mails_files(state->rcpt_list, state->mailfrom, program, transformations);
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
@@ -758,6 +752,9 @@ smtp_passive_accept(struct selector_key* key)
 		state->stm.initial = FAILED_CONNECTION_WRITE;
 	}
 
+	program = (char*)key->data;
+	transformations = key->data != NULL;
+
 	state->stm.max_state = ERROR;
 	state->stm.states = client_statbl;
 	stm_init(&state->stm);
@@ -809,18 +806,21 @@ get_current_mails()
 	return transferred_bytes;
 }
 bool
-get_current_status(){
+get_current_status()
+{
 	return transformations;
 }
 
 void
-set_new_status(bool new_status){
-	transformations=new_status;
+set_new_status(bool new_status)
+{
+	transformations = new_status;
 }
 
 void
-set_max_users(int n){
-	max_user=n;
+set_max_users(int n)
+{
+	max_user = n;
 }
 
 int

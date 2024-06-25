@@ -92,7 +92,7 @@ create_uuid(char* uuid_str)
 }
 
 void
-create_mails_files(struct rcpt_node* head, char* mailfrom)
+create_mails_files(struct rcpt_node* head, char* mailfrom, char* program, bool transformations)
 {
 	struct stat st;
 	if (stat("mails", &st) == -1) {
@@ -165,6 +165,41 @@ create_mails_files(struct rcpt_node* head, char* mailfrom)
 		write(fd, from_header, strlen(from_header));
 
 		current->file_fd = fd;
+
+		if (transformations) {
+			int fds[2];
+			if (pipe(fds) == -1) {
+				fprintf(stderr, "Error creating pipe\n");
+				abort();
+			}
+
+			pid_t pid = fork();
+			if (pid == -1) {
+				fprintf(stderr, "Error forking\n");
+				abort();
+			}
+
+			if (pid == 0) {
+				close(STDIN_FILENO);
+				dup(fds[0]);  // read end of where app writes
+				close(STDOUT_FILENO);
+				dup(fd);  // write end of where app reads
+
+				close(fds[0]);
+				close(fds[1]);
+				close(fd);
+
+				char* args[] = { program, NULL };
+				execvp(program, args);
+				fprintf(stderr, "Error executing program %s\n", program);
+				abort();
+			}
+
+			close(fds[0]);
+			close(fd);
+			current->file_fd = fds[1];
+		}
+
 		current = current->next;
 	}
 }

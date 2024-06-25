@@ -145,7 +145,7 @@ main(int argc, char** argv)
 		.handle_close = NULL,
 	};
 
-	ss = selector_register(selector, server, &smtp, OP_READ, NULL);
+	ss = selector_register(selector, server, &smtp, OP_READ, args.transformations);
 
 	if (ss != SELECTOR_SUCCESS) {
 		err_msg = "registering fd";

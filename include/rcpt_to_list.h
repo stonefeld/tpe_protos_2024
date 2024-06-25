@@ -18,6 +18,6 @@ void add_rcpt_to_list(struct rcpt_node** head, const char* email);
 void free_rcpt_list(struct rcpt_node* head);
 void close_fds(struct rcpt_node* head);
 void write_to_files(struct rcpt_node* head, struct data_parser* p);
-void create_mails_files(struct rcpt_node* head, char* mailfrom);
+void create_mails_files(struct rcpt_node* head, char* mailfrom, char* program, bool transformations);
 
 #endif
