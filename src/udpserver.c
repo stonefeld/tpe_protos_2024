@@ -15,6 +15,8 @@
 #include <sys/socket.h>  // socket
 #include <sys/types.h>   // socket
 #include <unistd.h>
+#include <stdbool.h>
+#include <ctype.h>
 
 #define RESPONSE_SIZE 16
 #define BUFFER_SIZE   1024
@@ -37,7 +39,7 @@ typedef struct client
 } client_t;
 
 client_t *clients = NULL;
-const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener la cantidad de mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n - Ingrese 'status' para ver el estado de las transformaciones\n - Ingrese 'transon' para activar las transformaciones\n - Ingrese 'transoff' para desactivar las transformaciones\n - Ingrese 'maxuser <cant>' para poner una nueva cantidad de usuarios\n";
+const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener la cantidad de mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n - Ingrese 'status' para ver el estado de las transformaciones\n - Ingrese 'transon' para activar las transformaciones\n - Ingrese 'transoff' para desactivar las transformaciones\n - Ingrese 'max <cant>' para poner una nueva cantidad de usuarios\n - Ingrese 'cant' para obtener la maxima cantidad de usuarios\n";
 
 client_t*
 find_client(struct sockaddr_storage* client_addr, socklen_t client_addr_len)
@@ -114,6 +116,18 @@ handle_authentication(client_t* client,
 	}
 }
 
+
+bool is_number(const char *str) {
+    while (*str) {
+        if (!isdigit(*str)) {
+            return false;
+        }
+        str++;
+    }
+    return true;
+}
+
+
 // Manejador de lectura para el socket UDP
 void
 udp_read_handler(struct selector_key* key)
@@ -145,7 +159,6 @@ udp_read_handler(struct selector_key* key)
 	if (client->state == STATE_WAIT_USERNAME || client->state == STATE_WAIT_PASSWORD) {
 		handle_authentication(client, buffer, received, key->fd, &client_addr, client_addr_len);
 
-		// After successful authentication, send the help message
 		if (client->state == STATE_AUTH_SUCCESS) {
 			sendto(key->fd, help, strlen(help), 0, (struct sockaddr*)&client_addr, client_addr_len);
 		}
@@ -156,7 +169,6 @@ udp_read_handler(struct selector_key* key)
         uint64_t cantidad=0;
         char rta[BUFFER_SIZE];
 
-        // Comparing strings for commands
         if (strcasecmp(buffer, "historico\n") == 0) {
             cantidad = get_historic_users();
             snprintf(rta, BUFFER_SIZE, "Cantidad historica %ld\r\n\n", cantidad);
@@ -169,6 +181,9 @@ udp_read_handler(struct selector_key* key)
         }else if (strcasecmp(buffer, "mail\n") == 0) {
             cantidad = get_current_mails();
             snprintf(rta, BUFFER_SIZE, "Mails enviados %ld\r\n\n", cantidad);
+        }else if (strcasecmp(buffer, "cant\n") == 0) {
+            cantidad = get_cant_max_users();
+            snprintf(rta, BUFFER_SIZE, "Cantidad maxima de usuarios %ld\r\n\n", cantidad);
         }else if (strcasecmp(buffer, "status\n") == 0) {
             bool status = get_current_status();
             if(status){
@@ -182,13 +197,31 @@ udp_read_handler(struct selector_key* key)
         }else if (strcasecmp(buffer, "transoff\n") == 0) {
             set_new_status(false);
             snprintf(rta, BUFFER_SIZE, "Transormaciones desactivadas\r\n\n");
-        }else if (strcasecmp(buffer, "maxuser\n") == 0) {
-            set_new_status(false);
-            snprintf(rta, BUFFER_SIZE, "Transormaciones desactivadas\r\n\n");
         }else if (strcasecmp(buffer, "help\n") == 0) {
             snprintf(rta, BUFFER_SIZE, "%s\r\n\n", help);
-        } else {
-            snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s",help);
+            if ((buffer[0] == 'm' || buffer[0] == 'M') &&
+                (buffer[1] == 'a' || buffer[1] == 'A') &&
+                (buffer[2] == 'x' || buffer[2] == 'X') &&
+                (buffer[3] == ' ')) {
+
+                char *number_str = &buffer[4];
+                number_str[strcspn(number_str, "\r\n")] = '\0';
+                int number;
+
+                if (is_number(number_str)) {
+                    number = atoi(number_str);
+                    if (number >= 0) {
+                        set_max_users(number);
+                        snprintf(rta, BUFFER_SIZE, "Nuevo número máximo de usuarios: %d\r\n\n", number);
+                    } else {
+                        snprintf(rta, BUFFER_SIZE, "Error: Argumento inválido\r\n\n");
+                    }
+                } else {
+                    snprintf(rta, BUFFER_SIZE, "Error: Argumento inválido\r\n\n");
+                }
+            } else {
+                snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s", help);
+            }
         }
         
         ssize_t sent = sendto(key->fd, rta, strlen(rta), 0, (struct sockaddr *)&client_addr, client_addr_len);

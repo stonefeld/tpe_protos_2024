@@ -822,3 +822,8 @@ void
 set_max_users(int n){
 	max_user=n;
 }
+
+int
+get_cant_max_users(){
+	return max_user;
+}

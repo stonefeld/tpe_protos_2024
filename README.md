@@ -35,6 +35,9 @@
     actual: muestra la cantidad de usuarios conectados al servidor smtp.
     mail: muestra la cantidad de mails enviados.
     bytes: muestra la cantidad de bytes enviados.
+    status: muestra el estado de las transformaciones
+    transon: activa las transformaciones
+    transoff: desactiva las transformaciones
     help: muestra los comandos disponibles en el protocolo de supervision.
 
 

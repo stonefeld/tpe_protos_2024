@@ -17,4 +17,8 @@ bool get_current_status();
 
 void set_new_status(bool new_status);
 
+void set_max_users(int n);
+
+int get_cant_max_users();
+
 #endif
