@@ -1,4 +1,3 @@
-
 #include "udpserver.h"
 #include "args.h"
 #include "selector.h"
@@ -19,7 +18,6 @@
 #include <netdb.h>       // for getnameinfo
 #include <strings.h>     // for strncasecmp
 
-#define RESPONSE_SIZE 16
 #define BUFFER_SIZE 1024
 
 
@@ -141,19 +139,6 @@ void udp_read_handler(struct selector_key *key) {
     }
 
     if (client->state == STATE_AUTH_SUCCESS) {
-        uint8_t response[RESPONSE_SIZE]; 
-        size_t offset = 0;
-
-        response[offset++] = 0xFF;
-        response[offset++] = 0xFE;
-
-        response[offset++] = 0x00;
-
-        response[offset++] = 0x00;
-        response[offset++] = 0x01;
-
-        response[offset++] = 0x00;
-
         uint64_t cantidad=0;
         char rta[BUFFER_SIZE];
 
@@ -175,11 +160,6 @@ void udp_read_handler(struct selector_key *key) {
         } else {
             snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s",help);
         }
-
-        uint64_to_big_endian(cantidad, &response[offset]);
-        offset += 8;
-
-        response[offset++] = 0x00;
         
         ssize_t sent = sendto(key->fd, rta, strlen(rta), 0, (struct sockaddr *)&client_addr, client_addr_len);
         if (sent < 0) {
