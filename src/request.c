@@ -23,6 +23,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 	switch (p->state) {
 		case request_verb: {
 			switch (c) {
+				case 'h':
+				case 'H':
 				case 'e':
 				case 'E': {
 					next = request_verb_e;
@@ -48,6 +50,11 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 					next = request_verb_q;
 				} break;
 
+				case ' ':
+				case '\t': {
+					next = request_verb;
+				} break;
+
 				default: {
 					next = request_error;
 				} break;
@@ -56,6 +63,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 		case request_verb_e: {
 			switch (c) {
+				case 'e':
+				case 'E':
 				case 'h':
 				case 'H': {
 					next = request_verb_eh;
