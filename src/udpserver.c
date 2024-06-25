@@ -39,7 +39,7 @@ typedef struct client {
 } client_t;
 
 client_t *clients = NULL;
-const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n";
+const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n - Ingrese 'mail' para obtener los mails enviados\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\n";
 
 client_t *find_client(struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
     client_t *current = clients;
@@ -160,12 +160,18 @@ void udp_read_handler(struct selector_key *key) {
         // Comparing strings for commands
         if (strcasecmp(buffer, "historico\n") == 0) {
             cantidad = get_historic_users();
-            snprintf(rta, BUFFER_SIZE, "Cantidad historica %ld\r\n", cantidad);
+            snprintf(rta, BUFFER_SIZE, "Cantidad historica %ld\r\n\n", cantidad);
         } else if (strcasecmp(buffer, "actual\n") == 0) {
             cantidad = get_current_users();
-            snprintf(rta, BUFFER_SIZE, "Cantidad actual %ld\r\n", cantidad);
+            snprintf(rta, BUFFER_SIZE, "Cantidad actual %ld\r\n\n", cantidad);
+        }else if (strcasecmp(buffer, "bytes\n") == 0) {
+            cantidad = get_current_bytes();
+            snprintf(rta, BUFFER_SIZE, "Bytes transferidos %ld\r\n\n", cantidad);
+        }else if (strcasecmp(buffer, "mail\n") == 0) {
+            cantidad = get_current_mails();
+            snprintf(rta, BUFFER_SIZE, "Mails enviados %ld\r\n\n", cantidad);
         } else if (strcasecmp(buffer, "help\n") == 0) {
-            snprintf(rta, BUFFER_SIZE, "%s\r\n", help);
+            snprintf(rta, BUFFER_SIZE, "%s\r\n\n", help);
         } else {
             snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s",help);
         }
