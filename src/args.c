@@ -77,8 +77,8 @@ parse_args(const int argc, char** argv, struct smtpargs* args)
 {
 	memset(args, 0, sizeof(*args));  // sobre todo para setear en null los punteros de users
 
-	args->smtp_port = 2525;
-	args->mng_port = 2626;
+	args->smtp_port = 1209;
+	args->mng_port = 6969;
 	args->pass = "secretpa";
 	args->transformations = "tac";
 
