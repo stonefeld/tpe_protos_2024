@@ -24,7 +24,10 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 		case request_verb: {
 			switch (c) {
 				case 'h':
-				case 'H':
+				case 'H': {
+					next = request_verb_h;
+				} break;
+
 				case 'e':
 				case 'E': {
 					next = request_verb_e;
@@ -61,10 +64,60 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			}
 		} break;
 
-		case request_verb_e: {
+		case request_verb_h: {
 			switch (c) {
 				case 'e':
-				case 'E':
+				case 'E': {
+					next = request_verb_he;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		}
+
+		case request_verb_he: {
+			switch (c) {
+				case 'l':
+				case 'L': {
+					next = request_verb_hel;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_hel: {
+			switch (c) {
+				case 'o':
+				case 'O': {
+					next = request_verb_helo;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_helo: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_helo_sep;
+				} break;
+
+				default: {
+					next = request_error;
+				} break;
+			}
+		} break;
+
+		case request_verb_e: {
+			switch (c) {
 				case 'h':
 				case 'H': {
 					next = request_verb_eh;
@@ -107,11 +160,6 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 				case ' ':
 				case '\t': {
 					next = request_ehlo_sep;
-				} break;
-
-				case '\r': {
-					next = request_cr;
-					p->command = request_command_ehlo;
 				} break;
 
 				default: {
@@ -428,6 +476,39 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			}
 		} break;
 
+		case request_helo_sep: {
+			switch (c) {
+				case ' ':
+				case '\t': {
+					next = request_helo_sep;
+				} break;
+
+				case '\r': {
+					next = request_error;
+				} break;
+
+				default: {
+					next = request_helo_domain;
+					p->i = 0;
+					p->request->domain[p->i++] = c;
+				} break;
+			}
+		} break;
+
+		case request_helo_domain: {
+			switch (c) {
+				case '\r': {
+					next = request_cr;
+					p->command = request_command_helo;
+				} break;
+
+				default: {
+					next = request_helo_domain;
+					p->request->domain[p->i++] = c;
+				} break;
+			}
+		} break;
+
 		case request_ehlo_sep: {
 			switch (c) {
 				case ' ':
@@ -436,8 +517,7 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 				} break;
 
 				case '\r': {
-					next = request_cr;
-					p->command = request_command_ehlo;
+					next = request_error;
 				} break;
 
 				default: {

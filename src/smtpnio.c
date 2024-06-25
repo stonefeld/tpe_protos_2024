@@ -262,8 +262,8 @@ failed_connection_read_process(struct selector_key* key, struct smtp* state)
 				buffer_write_adv(&state->write_buffer, 9);
 			} else {
 				ret = FAILED_CONNECTION_WRITE;
-				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 18);
+				strcpy((char*)ptr, "500 Syntax error. Expected: QUIT\r\n");
+				buffer_write_adv(&state->write_buffer, 34);
 			}
 		} else {
 			ret = ERROR;
@@ -306,14 +306,19 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 				char s[] = "250-localhost\r\n250-PIPELINING\r\n250 SIZE 10240000\r\n";
 				sprintf((char*)ptr, s, state->request_parser.request->domain);
 				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+			} else if (state->request_parser.command == request_command_helo) {
+				ret = EHLO_WRITE;
+				char s[] = "250 localhost\r\n";
+				sprintf((char*)ptr, s, state->request_parser.request->domain);
+				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
 			} else {
 				ret = EHLO_WRITE;
-				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 18);
+				strcpy((char*)ptr, "500 Syntax error. Expected: HELO domain or EHLO domain\r\n");
+				buffer_write_adv(&state->write_buffer, 56);
 			}
 		} else {
 			ret = ERROR;
@@ -333,7 +338,7 @@ static unsigned
 ehlo_write(struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	if (p->command == request_command_ehlo)
+	if (p->command == request_command_ehlo || p->command == request_command_helo)
 		return write_status(key, EHLO_WRITE, MAIL_FROM_READ);
 	return write_status(key, EHLO_WRITE, EHLO_READ);
 }
@@ -360,17 +365,21 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 					buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 				} else {
 					ret = MAIL_FROM_WRITE;
-					strcpy((char*)ptr, "550 Invalid domain\r\n");
-					buffer_write_adv(&state->write_buffer, 20);
+					strcpy((char*)ptr, "550 Invalid domain. The domain specified does not exist\r\n");
+					buffer_write_adv(&state->write_buffer, 57);
 				}
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+			} else if (state->request_parser.command == request_command_rcpt) {
+				ret = MAIL_FROM_WRITE;
+				strcpy((char*)ptr, "503 Bad sequence of commands. MAIL FROM command must precede RCPT TO command\r\n");
+				buffer_write_adv(&state->write_buffer, 78);
 			} else {
 				ret = MAIL_FROM_WRITE;
-				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 18);
+				strcpy((char*)ptr, "500 Syntax error. Expected: MAIL FROM:<email@domain>\r\n");
+				buffer_write_adv(&state->write_buffer, 54);
 			}
 		} else {
 			ret = ERROR;
@@ -421,18 +430,22 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 					buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 				} else {
 					ret = RCPT_TO_WRITE;
-					strcpy((char*)ptr, "550 Invalid domain\r\n");
-					buffer_write_adv(&state->write_buffer, 20);
+					strcpy((char*)ptr, "550 Invalid domain. The domain specified does not exist\r\n");
+					buffer_write_adv(&state->write_buffer, 57);
 				}
 
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+			} else if (state->request_parser.command == request_command_data) {
+				ret = MAIL_FROM_WRITE;
+				strcpy((char*)ptr, "503 Bad sequence of commands. RCPT TO command must precede DATA command\r\n");
+				buffer_write_adv(&state->write_buffer, 73);
 			} else {
 				ret = RCPT_TO_WRITE;
-				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 18);
+				strcpy((char*)ptr, "500 Syntax error. Expected: RCPT TO:<email@domain>\r\n");
+				buffer_write_adv(&state->write_buffer, 52);
 			}
 		} else {
 			ret = ERROR;
@@ -490,8 +503,8 @@ data_read_process(struct selector_key* key, struct smtp* state)
 
 			} else {
 				ret = DATA_WRITE;
-				strcpy((char*)ptr, "500 Syntax error\r\n");
-				buffer_write_adv(&state->write_buffer, 18);
+				strcpy((char*)ptr, "500 Syntax error. Expected: DATA or RCPT TO:<email@domain>\r\n");
+				buffer_write_adv(&state->write_buffer, 60);
 			}
 		} else {
 			ret = ERROR;
@@ -514,7 +527,7 @@ data_write(struct selector_key* key)
 	if (p->command == request_command_data) {
 		return write_status(key, DATA_WRITE, MAIL_INFO_READ);
 	} else if (p->command == request_command_rcpt) {
-		return write_status(key, RCPT_TO_WRITE, DATA_READ);
+		return write_status(key, DATA_WRITE, DATA_READ);
 	}
 	return write_status(key, DATA_WRITE, DATA_READ);
 }

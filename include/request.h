@@ -10,6 +10,7 @@
 enum request_command
 {
 	request_command_ehlo,
+	request_command_helo,
 	request_command_mail,
 	request_command_rcpt,
 	request_command_data,
@@ -30,6 +31,11 @@ enum request_state
 	request_verb_eh,
 	request_verb_ehl,
 	request_verb_ehlo,
+
+	request_verb_h,
+	request_verb_he,
+	request_verb_hel,
+	request_verb_helo,
 
 	request_verb_m,
 	request_verb_ma,
@@ -58,6 +64,9 @@ enum request_state
 	request_verb_qu,
 	request_verb_qui,
 	request_verb_quit,
+
+	request_helo_sep,
+	request_helo_domain,
 
 	request_ehlo_sep,
 	request_ehlo_domain,
