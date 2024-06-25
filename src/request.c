@@ -60,6 +60,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -125,6 +127,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -138,6 +142,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -151,6 +157,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -177,6 +185,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -190,6 +200,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -203,6 +215,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -215,6 +229,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -228,6 +244,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -241,6 +259,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -254,6 +274,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -267,6 +289,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -279,6 +303,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -292,6 +318,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -305,6 +333,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -318,6 +348,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -330,6 +362,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -343,6 +377,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -356,6 +392,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -368,6 +406,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -381,6 +421,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -394,6 +436,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -407,6 +451,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -433,6 +479,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -446,6 +494,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -459,6 +509,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -555,6 +607,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -602,6 +656,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -682,8 +738,8 @@ request_consume(buffer* b, struct request_parser* p, bool* errored)
 		const uint8_t c = buffer_read(b);
 		st = request_parser_feed(p, c);
 		// TODO: check this shi
-		// if (request_is_done(st, errored))
-		// 	break;
+		if (request_is_done(st, errored))
+			break;
 	}
 
 	return st;
@@ -694,7 +750,7 @@ request_is_done(const enum request_state st, bool* errored)
 {
 	if (st >= request_error && errored != 0)
 		*errored = true;
-	return st >= request_done;
+	return st == request_done;
 }
 
 void

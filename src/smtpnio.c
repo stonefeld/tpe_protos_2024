@@ -132,7 +132,7 @@ write_status(struct selector_key* key, unsigned current_state, unsigned next_sta
 	buffer* wb = &state->write_buffer;
 
 	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
+	ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL);
 
 	if (n > 0) {
 		buffer_read_adv(wb, n);
@@ -192,7 +192,7 @@ greeting_write(struct selector_key* key)
 	buffer_write_adv(&state->write_buffer, len);
 
 	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
+	ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL);
 
 	if (n > 0) {
 		buffer_read_adv(wb, n);
@@ -225,7 +225,7 @@ failed_connection_write(struct selector_key* key)
 	buffer_write_adv(&state->write_buffer, len);
 
 	uint8_t* ptr = buffer_read_ptr(wb, &count);
-	ssize_t n = send(key->fd, ptr, count, 0);
+	ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL);
 
 	if (n > 0) {
 		buffer_read_adv(wb, n);
@@ -703,11 +703,7 @@ smtp_write(struct selector_key* key)
 
 	if (st == ERROR || st == DONE) {
 		smtp_done(key);
-	} /*  else if (st == REQUEST_READ || st == DATA_READ) {
-	     buffer* rb = &ATTACHMENT(key)->read_buffer;
-	     if (buffer_can_read(rb))
-	         smtp_read(key);
-	 } */
+	}
 }
 
 static void
@@ -771,17 +767,17 @@ smtp_passive_accept(struct selector_key* key)
 	state->stm.states = client_statbl;
 	stm_init(&state->stm);
 
+	state->request_parser.request = &state->request;
+	request_parser_init(&state->request_parser);
+
+	data_parser_init(&state->data_parser);
+
 	buffer_init(&state->read_buffer, N(state->raw_buff_read), state->raw_buff_read);
 	buffer_init(&state->write_buffer, N(state->raw_buff_write), state->raw_buff_write);
 
 	fprintf(stdout, "New user connected\n");
 	fprintf(stdout, "Current users: %d\n", ++current_users);
 	fprintf(stdout, "Historic users: %d\n\n", ++historic_users);
-
-	state->request_parser.request = &state->request;
-	request_parser_init(&state->request_parser);
-
-	data_parser_init(&state->data_parser);
 
 	if (selector_register(key->s, client, &smtp_handler, OP_WRITE, state) != SELECTOR_SUCCESS)
 		goto fail;
