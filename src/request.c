@@ -648,7 +648,7 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 				} break;
 
 				default: {
-					next = request_error;
+					next = request_mail_from_sender;
 				} break;
 			}
 		} break;

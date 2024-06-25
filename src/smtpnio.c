@@ -357,17 +357,11 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
 			if (state->request_parser.command == request_command_mail) {
-				if (check_email_domain(state->request_parser.request->arg)) {
-					ret = MAIL_FROM_WRITE;
-					char s[] = "250 Mail from received - %s\r\n";
-					strcpy(state->mailfrom, state->request_parser.request->arg);
-					sprintf((char*)ptr, s, state->mailfrom);
-					buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
-				} else {
-					ret = MAIL_FROM_WRITE;
-					strcpy((char*)ptr, "550 Invalid domain. The domain specified does not exist\r\n");
-					buffer_write_adv(&state->write_buffer, 57);
-				}
+				ret = MAIL_FROM_WRITE;
+				char s[] = "250 Mail from received - %s\r\n";
+				strcpy(state->mailfrom, state->request_parser.request->arg);
+				sprintf((char*)ptr, s, state->mailfrom);
+				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
@@ -400,7 +394,7 @@ static unsigned
 mail_from_write(struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	if (p->command == request_command_mail && check_email_domain(p->request->arg))
+	if (p->command == request_command_mail)
 		return write_status(key, MAIL_FROM_WRITE, RCPT_TO_READ);
 	return write_status(key, MAIL_FROM_WRITE, MAIL_FROM_READ);
 }
