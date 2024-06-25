@@ -9,4 +9,8 @@ int get_historic_users();
 
 int get_current_users();
 
+int get_current_bytes();
+
+int get_current_mails();
+
 #endif

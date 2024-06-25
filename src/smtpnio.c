@@ -107,6 +107,8 @@ struct status global_status = { 0 };
 
 static int historic_users = 0;
 static int current_users = 0;
+static int transferred_bytes = 0;
+static int mails_sent = 0;
 
 static unsigned
 write_status(struct selector_key* key, unsigned current_state, unsigned next_state)
@@ -150,7 +152,7 @@ read_status(struct selector_key* key,
 		size_t count;
 		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
 		ssize_t n = recv(key->fd, ptr, count, 0);
-
+		transferred_bytes+=n;
 		if (n > 0) {
 			buffer_write_adv(&state->read_buffer, n);
 			ret = read_process(key, state);
@@ -506,6 +508,7 @@ data_buffer_init(const unsigned state, struct selector_key* key)
 static void
 mail_info_read_close(const unsigned state, struct selector_key* key)
 {
+	mails_sent++;
 	struct smtp* s = ATTACHMENT(key);
 	close(s->file_fd);
 }
@@ -761,4 +764,14 @@ int
 get_current_users()
 {
 	return current_users;
+}
+
+int
+get_current_bytes(){
+	return transferred_bytes;
+}
+
+int
+get_current_mails(){
+	return transferred_bytes;
 }
