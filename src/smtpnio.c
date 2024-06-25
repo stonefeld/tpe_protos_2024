@@ -2,6 +2,7 @@
 
 #include "buffer.h"
 #include "data.h"
+#include "rcpt_to_list.h"
 #include "request.h"
 #include "selector.h"
 #include "stm.h"
@@ -21,6 +22,7 @@
 
 #define N(x)      (sizeof(x) / sizeof((x)[0]))
 #define MAX_USERS 500
+#define DOMAIN    "@smtpd.com"
 
 /** obtiene el struct (smtp *) desde la llave de selección  */
 #define ATTACHMENT(key) ((struct smtp*)(key)->data)
@@ -66,15 +68,15 @@ struct smtp
 	bool is_data;
 
 	char mailfrom[255];
-	char rcptto[255];
-
-	int file_fd;
+	struct rcpt_node* rcpt_list;
 };
 
 struct status
 {
 	int historic_connections, concurrent_connections, bytes_transfered, mails_sent;
 };
+
+static int check_email_domain(const char* email);
 
 static unsigned write_status(struct selector_key* key, unsigned current_state, unsigned next_state);
 static unsigned read_status(struct selector_key* key,
@@ -109,6 +111,16 @@ static int historic_users = 0;
 static int current_users = 0;
 static int transferred_bytes = 0;
 static int mails_sent = 0;
+
+static int
+check_email_domain(const char* email)
+{
+	const char* at_position = strchr(email, '@');
+	if (at_position == NULL || strcmp(at_position, DOMAIN) != 0) {
+		return 0;
+	}
+	return 1;
+}
 
 static unsigned
 write_status(struct selector_key* key, unsigned current_state, unsigned next_state)
@@ -152,7 +164,7 @@ read_status(struct selector_key* key,
 		size_t count;
 		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
 		ssize_t n = recv(key->fd, ptr, count, 0);
-		transferred_bytes+=n;
+		transferred_bytes += n;
 		if (n > 0) {
 			buffer_write_adv(&state->read_buffer, n);
 			ret = read_process(key, state);
@@ -269,8 +281,9 @@ failed_connection_read(struct selector_key* key)
 static void
 request_read_init(const unsigned state, struct selector_key* key)
 {
-	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	p->request = &ATTACHMENT(key)->request;
+	struct smtp* s = ATTACHMENT(key);
+	struct request_parser* p = &s->request_parser;
+	p->request = &s->request;
 	request_parser_init(p);
 }
 
@@ -338,11 +351,17 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
 			if (state->request_parser.command == request_command_mail) {
-				ret = MAIL_FROM_WRITE;
-				char s[] = "250 Mail from received - %s\r\n";
-				strcpy(state->mailfrom, state->request_parser.request->arg);
-				sprintf((char*)ptr, s, state->mailfrom);
-				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+				if (check_email_domain(state->request_parser.request->arg)) {
+					ret = MAIL_FROM_WRITE;
+					char s[] = "250 Mail from received - %s\r\n";
+					strcpy(state->mailfrom, state->request_parser.request->arg);
+					sprintf((char*)ptr, s, state->mailfrom);
+					buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+				} else {
+					ret = MAIL_FROM_WRITE;
+					strcpy((char*)ptr, "550 Invalid domain\r\n");
+					buffer_write_adv(&state->write_buffer, 20);
+				}
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
@@ -370,7 +389,7 @@ static unsigned
 mail_from_write(struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	if (p->command == request_command_mail)
+	if (p->command == request_command_mail && check_email_domain(p->request->arg))
 		return write_status(key, MAIL_FROM_WRITE, RCPT_TO_READ);
 	return write_status(key, MAIL_FROM_WRITE, MAIL_FROM_READ);
 }
@@ -389,11 +408,22 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 			uint8_t* ptr = buffer_write_ptr(&state->write_buffer, &count);
 
 			if (state->request_parser.command == request_command_rcpt) {
-				ret = RCPT_TO_WRITE;
-				char s[] = "250 Rcpt to received - %s\r\n";
-				strcpy(state->rcptto, state->request_parser.request->arg);
-				sprintf((char*)ptr, s, state->rcptto);
-				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+				if (check_email_domain(state->request_parser.request->arg)) {
+					ret = RCPT_TO_WRITE;
+					char s[] = "250 Rcpt to received - %s\r\n";
+					if (state->rcpt_list == NULL) {
+						state->rcpt_list = create_rcpt_node(state->request_parser.request->arg);
+					} else {
+						add_rcpt_to_list(&state->rcpt_list, state->request_parser.request->arg);
+					}
+					sprintf((char*)ptr, s, state->request_parser.request->arg);
+					buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+				} else {
+					ret = RCPT_TO_WRITE;
+					strcpy((char*)ptr, "550 Invalid domain\r\n");
+					buffer_write_adv(&state->write_buffer, 20);
+				}
+
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
@@ -421,7 +451,7 @@ static unsigned
 rcpt_to_write(struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	if (p->command == request_command_rcpt)
+	if (p->command == request_command_rcpt && check_email_domain(p->request->arg))
 		return write_status(key, RCPT_TO_WRITE, DATA_READ);
 	return write_status(key, RCPT_TO_WRITE, RCPT_TO_READ);
 }
@@ -444,31 +474,19 @@ data_read_process(struct selector_key* key, struct smtp* state)
 				strcpy((char*)ptr, "354 End data with <CR><LF>.<CR><LF>\r\n");
 				buffer_write_adv(&state->write_buffer, 37);
 
-				// TODO: revisar si hay mejor lugar para poner esto
-				char file_name[100] = "mails/";
-				strcat(file_name, ATTACHMENT(key)->rcptto);
-
-				struct stat st;
-
-				if (stat("mails/", &st) == -1) {
-					if (mkdir("mails/", 0777) == -1) {
-						fprintf(stderr, "Error creating directory\n");
-						abort();
-					}
-				}
-
-				int fd = open(file_name, O_CREAT | O_WRONLY, 0777);
-
-				if (fd == -1) {
-					fprintf(stderr, "Error creating file\n");
-					abort();
-				}
-
-				state->file_fd = fd;
+				create_mails_files(state->rcpt_list, state->mailfrom);
 			} else if (state->request_parser.command == request_command_quit) {
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+
+			} else if (state->request_parser.command == request_command_rcpt) {
+				ret = RCPT_TO_WRITE;
+				char s[] = "250 Rcpt to received - %s\r\n";
+				add_rcpt_to_list(&state->rcpt_list, state->request_parser.request->arg);
+				sprintf((char*)ptr, s, state->request_parser.request->arg);
+				buffer_write_adv(&state->write_buffer, strlen((char*)ptr));
+
 			} else {
 				ret = DATA_WRITE;
 				strcpy((char*)ptr, "500 Syntax error\r\n");
@@ -492,8 +510,11 @@ static unsigned
 data_write(struct selector_key* key)
 {
 	struct request_parser* p = &ATTACHMENT(key)->request_parser;
-	if (p->command == request_command_data)
+	if (p->command == request_command_data) {
 		return write_status(key, DATA_WRITE, MAIL_INFO_READ);
+	} else if (p->command == request_command_rcpt) {
+		return write_status(key, RCPT_TO_WRITE, DATA_READ);
+	}
 	return write_status(key, DATA_WRITE, DATA_READ);
 }
 
@@ -510,7 +531,9 @@ mail_info_read_close(const unsigned state, struct selector_key* key)
 {
 	mails_sent++;
 	struct smtp* s = ATTACHMENT(key);
-	close(s->file_fd);
+	close_fds(s->rcpt_list);
+	free_rcpt_list(s->rcpt_list);
+	s->rcpt_list = NULL;
 }
 
 static unsigned
@@ -523,8 +546,7 @@ mail_info_read_process(struct selector_key* key, struct smtp* state)
 
 	int st = data_consume(&state->read_buffer, &state->data_parser);
 
-	// write to file_fd
-	data_write_to_file(&s->data_parser, s->file_fd);
+	write_to_files(s->rcpt_list, &s->data_parser);
 
 	if (data_is_done(st)) {
 		if (selector_set_interest_key(key, OP_WRITE) == SELECTOR_SUCCESS) {
@@ -675,6 +697,7 @@ smtp_write(struct selector_key* key)
 static void
 smtp_destroy(struct smtp* s)
 {
+	free_rcpt_list(s->rcpt_list);
 	free(s);
 }
 
@@ -720,6 +743,7 @@ smtp_passive_accept(struct selector_key* key)
 	memset(state, 0, sizeof(*state));
 	memcpy(&state->client_addr, &client_addr, client_addr_len);
 	state->client_addr_len = client_addr_len;
+	state->rcpt_list = NULL;
 
 	if (current_users < MAX_USERS) {
 		state->stm.initial = GREETING_WRITE;
@@ -767,11 +791,13 @@ get_current_users()
 }
 
 int
-get_current_bytes(){
+get_current_bytes()
+{
 	return transferred_bytes;
 }
 
 int
-get_current_mails(){
+get_current_mails()
+{
 	return transferred_bytes;
 }

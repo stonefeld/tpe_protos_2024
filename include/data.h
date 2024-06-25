@@ -49,8 +49,6 @@ struct data_parser
 /** inicializa el parser */
 void data_parser_init(struct data_parser* p);
 
-void data_write_to_file(struct data_parser* p, const int fd);
-
 /** entrega un byte al parser. retorna true si se llego al final  */
 enum data_state data_parser_feed(struct data_parser* p, uint8_t c);
 

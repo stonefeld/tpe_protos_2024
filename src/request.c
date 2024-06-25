@@ -485,6 +485,10 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 					next = request_mail_from_sender;
 				} break;
 
+				case '\r': {
+					next = request_error;
+				} break;
+
 				default: {
 					next = request_mail_from;
 					p->request->arg[p->i++] = c;
@@ -526,6 +530,10 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 			switch (c) {
 				case '>': {
 					next = request_rcpt_to_recipient;
+				} break;
+
+				case '\r': {
+					next = request_error;
 				} break;
 
 				default: {

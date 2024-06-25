@@ -14,12 +14,6 @@ data_parser_init(struct data_parser* p)
 	buffer_init(&p->data_buffer, N(p->raw_data_buffer), p->raw_data_buffer);
 }
 
-void
-data_write_to_file(struct data_parser* p, const int fd)
-{
-	write(fd, p->data_buffer.data, p->data_buffer.write - p->data_buffer.data);
-}
-
 enum data_state
 data_parser_feed(struct data_parser* p, const uint8_t c)
 {
