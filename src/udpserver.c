@@ -39,7 +39,7 @@ typedef struct client
 } client_t;
 
 client_t *clients = NULL;
-const char *help = "HELP\r\n - Ingrese 'historico' para obtener el historico de usuarios conectados\r\n - Ingrese 'actual' para obtener los usuarios conectados ahora\r\n - Ingrese 'mail' para obtener la cantidad de mails enviados\r\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\r\n - Ingrese 'status' para ver el estado de las transformaciones\r\n - Ingrese 'transon' para activar las transformaciones\r\n - Ingrese 'transoff' para desactivar las transformaciones\r\n - Ingrese 'max <cant>' para poner una nueva cantidad de usuarios\r\n - Ingrese 'cant' para obtener la maxima cantidad de usuarios\r\n";
+const char *help = "HELP\r\n - Ingrese 'historico' para obtener el historico de usuarios conectados\r\n - Ingrese 'actual' para obtener los usuarios conectados ahora\r\n - Ingrese 'mail' para obtener la cantidad de mails enviados\r\n - Ingrese 'bytes' para obtener la cantidad de bytes transferidos\r\n - Ingrese 'status' para ver el estado de las transformaciones\r\n - Ingrese 'transon' para activar las transformaciones\r\n - Ingrese 'transoff' para desactivar las transformaciones\r\n - Ingrese 'cant' para obtener la maxima cantidad de usuarios\r\n";
 
 client_t*
 find_client(struct sockaddr_storage* client_addr, socklen_t client_addr_len)
