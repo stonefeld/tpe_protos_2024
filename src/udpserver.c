@@ -39,6 +39,7 @@ typedef struct client {
 } client_t;
 
 client_t *clients = NULL;
+const char *help = "HELP\n - Ingrese 'historico' para obtener el historico de usuarios conectados\n - Ingrese 'actual' para obtener los usuarios conectados ahora\n";
 
 client_t *find_client(struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
     client_t *current = clients;
@@ -53,12 +54,19 @@ client_t *find_client(struct sockaddr_storage *client_addr, socklen_t client_add
 
 void add_client(struct sockaddr_storage *client_addr, socklen_t client_addr_len) {
     client_t *new_client = (client_t *)malloc(sizeof(client_t));
+    if (new_client == NULL) {
+        perror("malloc");
+        return;
+    }
+
     memcpy(&new_client->client_addr, client_addr, client_addr_len);
     new_client->client_addr_len = client_addr_len;
     new_client->state = STATE_INIT;
     new_client->next = clients;
     clients = new_client;
+
 }
+
 
 void uint64_to_big_endian(uint64_t value, uint8_t *buffer) {
     buffer[0] = (value >> 56) & 0xFF;
@@ -86,8 +94,8 @@ void handle_authentication(client_t *client, char *buffer, ssize_t received, int
     } else if (client->state == STATE_WAIT_PASSWORD) {
         if (strncasecmp(buffer, "user", received) == 0) {
             client->state = STATE_AUTH_SUCCESS;
-            const char *response = "Acceso concedido. Puede escribir los comandos.\n";
-            sendto(fd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_addr_len);
+            char *response = "Acceso concedido. Puede escribir los comandos.\n";
+            sendto(fd, response, strlen(response), 0, (struct sockaddr *)client_addr, client_addr_len);            
         } else {
             client->state = STATE_WAIT_USERNAME;
             const char *response = "Contraseña incorrecta. Ingrese usuario: ";
@@ -124,6 +132,11 @@ void udp_read_handler(struct selector_key *key) {
 
     if (client->state == STATE_WAIT_USERNAME || client->state == STATE_WAIT_PASSWORD) {
         handle_authentication(client, buffer, received, key->fd, &client_addr, client_addr_len);
+
+        // After successful authentication, send the help message
+        if (client->state == STATE_AUTH_SUCCESS) {
+            sendto(key->fd, help, strlen(help), 0, (struct sockaddr *)&client_addr, client_addr_len);
+        }
         return;
     }
 
@@ -141,22 +154,22 @@ void udp_read_handler(struct selector_key *key) {
 
         response[offset++] = 0x00;
 
-        uint64_t cantidad;
+        uint64_t cantidad=0;
         char rta[BUFFER_SIZE];
-        switch (buffer[0]) {
-        case 'a':
-            cantidad = get_historic_users();
-            snprintf(rta, sizeof(rta), "Cantidad historica %ld\r\n", cantidad);
-            break;
 
-        case 'b':
+        // Comparing strings for commands
+        if (strcasecmp(buffer, "historico\n") == 0) {
+            cantidad = get_historic_users();
+            snprintf(rta, BUFFER_SIZE, "Cantidad historica %ld\r\n", cantidad);
+        } else if (strcasecmp(buffer, "actual\n") == 0) {
             cantidad = get_current_users();
-            snprintf(rta, sizeof(rta), "Cantidad actual %ld\r\n", cantidad);
-            break;
-        default:
-            cantidad = 1234;
-            break;
+            snprintf(rta, BUFFER_SIZE, "Cantidad actual %ld\r\n", cantidad);
+        } else if (strcasecmp(buffer, "help\n") == 0) {
+            snprintf(rta, BUFFER_SIZE, "%s\r\n", help);
+        } else {
+            snprintf(rta, BUFFER_SIZE, "Comando no reconocido\n %s",help);
         }
+
         uint64_to_big_endian(cantidad, &response[offset]);
         offset += 8;
 
@@ -169,3 +182,5 @@ void udp_read_handler(struct selector_key *key) {
         }
     }
 }
+
+
