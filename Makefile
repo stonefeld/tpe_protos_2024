@@ -15,7 +15,7 @@ $(BIN): $(OBJ)
 	$(CC) -o $(BIN) $^ $(LDFLAGS)
 
 build/request_test: test/request_test.o src/request.o src/buffer.o
-	$(CC) -o $@ $^ $(LDFLAGS) -pthread -lcheck_pic -pthread -lrt -lm -lsubunit
+	$(CC) -o $@ $^ $(LDFLAGS) -pthread -lcheck_pic -lrt -lm -lsubunit
 
 build/%.o: src/%.c
 	$(CC) -o $@ -c $< $(CFLAGS)

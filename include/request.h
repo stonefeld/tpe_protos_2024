@@ -77,9 +77,6 @@ enum request_state
 
 	// y a partir de aca son considerado con error
 	request_error,
-
-	/* request_error_unknown_verb,
-	request_error_invalid_length, */
 };
 
 struct request

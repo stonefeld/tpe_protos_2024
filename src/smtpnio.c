@@ -163,8 +163,9 @@ read_status(struct selector_key* key,
 	} else {
 		size_t count;
 		uint8_t* ptr = buffer_write_ptr(&state->read_buffer, &count);
-		ssize_t n = recv(key->fd, ptr, count, 0);
+		ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
 		transferred_bytes += n;
+
 		if (n > 0) {
 			buffer_write_adv(&state->read_buffer, n);
 			ret = read_process(key, state);
