@@ -75,9 +75,11 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
-		}
+		} break;
 
 		case request_verb_he: {
 			switch (c) {
@@ -88,6 +90,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -101,6 +105,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -114,6 +120,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
@@ -172,6 +180,8 @@ request_parser_feed(struct request_parser* p, const uint8_t c)
 
 				default: {
 					next = request_error;
+					p->state = next;
+					return request_parser_feed(p, c);
 				} break;
 			}
 		} break;
