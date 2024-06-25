@@ -62,5 +62,4 @@ CC=gcc make clean all
   - `nc -C -u localhost 6969`
 
 ## Ubicación de archivos
-El archivo correspondiente al informe se encuentra en la raiz de proyecto
-El directorio generado 'mails' se crea en la raiz del proyecto
+El archivo correspondiente al informe se encuentra en la raiz de proyecto. El directorio generado 'mails', tambien se crea en la raiz del proyecto
