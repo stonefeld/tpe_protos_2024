@@ -36,6 +36,7 @@ free_rcpt_list(struct rcpt_node* head)
 {
 	struct rcpt_node* current = head;
 	struct rcpt_node* next;
+
 	while (current != NULL) {
 		next = current->next;
 		free(current);
@@ -49,6 +50,24 @@ close_fds(struct rcpt_node* head)
 	struct rcpt_node* current = head;
 	while (current != NULL) {
 		close(current->file_fd);
+
+		char file_path[MAX_EMAIL_LENGTH * 3];
+		snprintf(file_path, sizeof(file_path), "mails/%s/tmp/%s", current->email, current->filename);
+
+		struct stat st;
+		if (stat(file_path, &st) == -1) {
+			fprintf(stderr, "Error getting file status for %s\n", file_path);
+			abort();
+		}
+
+		char file_path_new[400];
+		snprintf(file_path_new, sizeof(file_path_new), "mails/%s/new/%s", current->email, current->filename);
+
+		if (rename(file_path, file_path_new) == -1) {
+			fprintf(stderr, "Error renaming file %s to %s\n", file_path, file_path_new);
+			abort();
+		}
+
 		current = current->next;
 	}
 }
@@ -85,7 +104,7 @@ create_mails_files(struct rcpt_node* head, char* mailfrom)
 
 	struct rcpt_node* current = head;
 	while (current != NULL) {
-		char dir_name[355];
+		char dir_name[6 + MAX_EMAIL_LENGTH];
 		snprintf(dir_name, sizeof(dir_name), "mails/%s", current->email);
 
 		struct stat st;
@@ -96,15 +115,43 @@ create_mails_files(struct rcpt_node* head, char* mailfrom)
 			}
 		}
 
+		char dir_name_new[sizeof(dir_name) + 4];
+		snprintf(dir_name_new, sizeof(dir_name_new), "%s/new", dir_name);
+		if (stat(dir_name_new, &st) == -1) {
+			if (mkdir(dir_name_new, 0777) == -1) {
+				fprintf(stderr, "Error creating directory %s\n", dir_name);
+				abort();
+			}
+		}
+
+		char dir_name_cur[sizeof(dir_name) + 4];
+		snprintf(dir_name_cur, sizeof(dir_name_cur), "%s/cur", dir_name);
+		if (stat(dir_name_cur, &st) == -1) {
+			if (mkdir(dir_name_cur, 0777) == -1) {
+				fprintf(stderr, "Error creating directory %s\n", dir_name);
+				abort();
+			}
+		}
+
+		char dir_name_tmp[sizeof(dir_name) + 4];
+		snprintf(dir_name_tmp, sizeof(dir_name_tmp), "%s/tmp", dir_name);
+		if (stat(dir_name_tmp, &st) == -1) {
+			if (mkdir(dir_name_tmp, 0777) == -1) {
+				fprintf(stderr, "Error creating directory %s\n", dir_name);
+				abort();
+			}
+		}
+
 		char uuid_str[37];
 		create_uuid(uuid_str);
+		snprintf(current->filename, sizeof(current->filename), "%s.txt", uuid_str);
 
-		char file_name[400];
-		snprintf(file_name, sizeof(file_name), "%s/%s.txt", dir_name, uuid_str);
+		char file_path[400];
+		snprintf(file_path, sizeof(file_path), "%s/%s", dir_name_tmp, current->filename);
 
-		int fd = open(file_name, O_CREAT | O_WRONLY, 0777);
+		int fd = open(file_path, O_CREAT | O_WRONLY, 0777);
 		if (fd == -1) {
-			fprintf(stderr, "Error creating file %s\n", file_name);
+			fprintf(stderr, "Error creating file %s\n", file_path);
 			abort();
 		}
 

@@ -3,13 +3,14 @@
 
 #include "data.h"
 
-#define MAX_EMAIL_LENGTH 255
+#define MAX_EMAIL_LENGTH 40
 
 struct rcpt_node
 {
 	char email[MAX_EMAIL_LENGTH];
 	struct rcpt_node* next;
 	int file_fd;
+	char filename[MAX_EMAIL_LENGTH + 5];  // 5 = strlen(".txt") + 1
 };
 
 struct rcpt_node* create_rcpt_node(const char* email);
