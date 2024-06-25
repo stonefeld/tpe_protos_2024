@@ -219,7 +219,7 @@ failed_connection_write(struct selector_key* key)
 	size_t count;
 	buffer* wb = &state->write_buffer;
 
-	char* message = "554 failed connection to localhost SMTP\r\n";
+	char* message = "554 failed connection to localhost SMTP - Use QUIT to close\r\n";
 	int len = strlen(message);
 	memcpy(&state->raw_buff_write, message, len);
 	buffer_write_adv(&state->write_buffer, len);
@@ -260,10 +260,9 @@ failed_connection_read_process(struct selector_key* key, struct smtp* state)
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+				write_status(key, FAILED_CONNECTION_READ, DONE);
 			} else {
 				ret = FAILED_CONNECTION_WRITE;
-				strcpy((char*)ptr, "500 Syntax error. Expected: QUIT\r\n");
-				buffer_write_adv(&state->write_buffer, 34);
 			}
 		} else {
 			ret = ERROR;
@@ -315,6 +314,7 @@ ehlo_read_process(struct selector_key* key, struct smtp* state)
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+				write_status(key, EHLO_READ, DONE);
 			} else {
 				ret = EHLO_WRITE;
 				strcpy((char*)ptr, "500 Syntax error. Expected: HELO domain or EHLO domain\r\n");
@@ -372,6 +372,7 @@ mail_from_read_process(struct selector_key* key, struct smtp* state)
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+				write_status(key, MAIL_FROM_READ, DONE);
 			} else if (state->request_parser.command == request_command_rcpt) {
 				ret = MAIL_FROM_WRITE;
 				strcpy((char*)ptr, "503 Bad sequence of commands. MAIL FROM command must precede RCPT TO command\r\n");
@@ -438,6 +439,7 @@ rcpt_to_read_process(struct selector_key* key, struct smtp* state)
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
+				write_status(key, RCPT_TO_READ, DONE);
 			} else if (state->request_parser.command == request_command_data) {
 				ret = MAIL_FROM_WRITE;
 				strcpy((char*)ptr, "503 Bad sequence of commands. RCPT TO command must precede DATA command\r\n");
@@ -493,7 +495,7 @@ data_read_process(struct selector_key* key, struct smtp* state)
 				ret = DONE;
 				strcpy((char*)ptr, "221 Bye\r\n");
 				buffer_write_adv(&state->write_buffer, 9);
-
+				write_status(key, DATA_READ, DONE);
 			} else if (state->request_parser.command == request_command_rcpt) {
 				ret = RCPT_TO_WRITE;
 				char s[] = "250 Rcpt to received - %s\r\n";
