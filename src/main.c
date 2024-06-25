@@ -42,7 +42,7 @@ sigterm_handler(const int signal)
 int
 main(int argc, char** argv)
 {
-	struct socks5args args;
+	struct smtpargs args;
 	parse_args(argc, argv, &args);
 
 	close(0);

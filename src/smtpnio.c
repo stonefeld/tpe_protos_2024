@@ -752,8 +752,8 @@ smtp_passive_accept(struct selector_key* key)
 	state->client_addr_len = client_addr_len;
 	state->rcpt_list = NULL;
 
-	if (current_int max_user) {
-		state->;stm.initial = GREETING_WRITE;
+	if (current_users < max_user) {
+		state->stm.initial = GREETING_WRITE;
 	} else {
 		state->stm.initial = FAILED_CONNECTION_WRITE;
 	}
@@ -808,12 +808,12 @@ get_current_mails()
 {
 	return transferred_bytes;
 }
-bool 
+bool
 get_current_status(){
 	return transformations;
 }
 
-void 
+void
 set_new_status(bool new_status){
 	transformations=new_status;
 }

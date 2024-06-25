@@ -1,37 +1,17 @@
 #ifndef __ARGS_H__
 #define __ARGS_H__
 
-#include <stdbool.h>
-
 #define MAX_USERS 10
 
-struct users
-{
-	char* name;
-	char* pass;
-};
+#include <stdbool.h>
 
-struct doh
+struct smtpargs
 {
-	char* host;
-	char* ip;
-	unsigned short port;
-	char* path;
-	char* query;
-};
-
-struct socks5args
-{
-	char* smtp_addr;
+	char* mail_dir;
 	unsigned short smtp_port;
-
-	char* mng_addr;
 	unsigned short mng_port;
-
-	char* transformation_program;
-	
-	struct doh doh;
-	struct users users[MAX_USERS];
+	char* transformations;
+	char* pass;
 };
 
 /**
@@ -39,6 +19,6 @@ struct socks5args
  * args con defaults o la seleccion humana. Puede cortar
  * la ejecución.
  */
-void parse_args(const int argc, char** argv, struct socks5args* args);
+void parse_args(const int argc, char** argv, struct smtpargs* args);
 
 #endif

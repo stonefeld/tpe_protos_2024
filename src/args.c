@@ -1,12 +1,13 @@
 #include "args.h"
 
-#include <bits/getopt_core.h>
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h> /* LONG_MIN et al */
 #include <stdio.h>  /* for printf */
 #include <stdlib.h> /* for exit */
 #include <string.h> /* memset */
+
+#define PASS_LENGTH 8
 
 static unsigned short
 port(const char* s)
@@ -18,33 +19,40 @@ port(const char* s)
 	    sl > USHRT_MAX) {
 		fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
 		exit(1);
-		return 1;
 	}
-	return (unsigned short)sl;
+	return sl;
 }
 
-static void
-user(char* s, struct users* user)
+static const char*
+pass(const char* s)
 {
-	char* p = strchr(s, ':');
-	if (p == NULL) {
-		fprintf(stderr, "password not found\n");
+	if (strlen(s) != PASS_LENGTH) {
+		fprintf(stderr, "password should have 8 characters\n");
 		exit(1);
-	} else {
-		*p = 0;
-		p++;
-		user->name = s;
-		user->pass = p;
 	}
+	return s;
 }
+
+/*static void
+user(char *s, struct users *user) {
+    char *p = strchr(s, ':');
+    if(p == NULL) {
+        fprintf(stderr, "password not found\n");
+        exit(1);
+    } else {
+        *p = 0;
+        p++;
+        user->name = s;
+        user->pass = p;
+    }
+}*/
 
 static void
 version(void)
 {
 	fprintf(stderr,
-	        "smtpd version 0.0\n"
-	        "ITBA Protocolos de Comunicación 2024/1 -- Grupo X\n"
-	        "AQUI VA LA LICENCIA\n");
+	        "smtp version 1.0\n"
+	        "ITBA Protocolos de Comunicación 2024/1 -- Grupo 5\n");
 }
 
 static void
@@ -54,112 +62,82 @@ usage(const char* progname)
 	        "Usage: %s [OPTION]...\n"
 	        "\n"
 	        "   -h               Imprime la ayuda y termina.\n"
-	        "   -l <SMTP addr>  Dirección donde servirá el servidor SMTP.\n"
-	        "   -L <conf  addr>  Dirección donde servirá el servicio de management.\n"
 	        "   -p <SMTP port>  Puerto entrante conexiones SMTP.\n"
 	        "   -P <conf port>   Puerto entrante conexiones configuracion\n"
-	        "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
-			"   -T               Apaga las transformaciones.\n"
+	        "   -u <pass>		 Contraseña de admin. Hasta 10.\n"
+	        "   -T <program>     Prende las transformaciones.\n"
 	        "   -v               Imprime información sobre la versión versión y termina.\n"
-	        "\n",
+	        "\n\n",
 	        progname);
 	exit(1);
 }
 
 void
-parse_args(const int argc, char** argv, struct socks5args* args)
+parse_args(const int argc, char** argv, struct smtpargs* args)
 {
 	memset(args, 0, sizeof(*args));  // sobre todo para setear en null los punteros de users
 
-	args->smtp_addr = "0.0.0.0";
-	args->smtp_port = 1209;
-
-	args->mng_addr = "127.0.0.1";
-	args->mng_port = 8080;
-
+	args->smtp_port = 2525;
+	args->mng_port = 2626;
+	args->pass = "secretpa";
+	args->transformations = "tac";
 
 	int c;
-	int nusers = 0;
 
 	while (true) {
 		int option_index = 0;
-		static struct option long_options[] = {
-			{ "doh-ip", required_argument, 0, 0xD001 },    { "doh-port", required_argument, 0, 0xD002 },
-			{ "doh-host", required_argument, 0, 0xD003 },  { "doh-path", required_argument, 0, 0xD004 },
-			{ "doh-query", required_argument, 0, 0xD005 }, { 0, 0, 0, 0 }
+		static struct option long_options[] = { /* { "doh-ip",    required_argument, 0, 0xD001 },
+			                                    { "doh-port",  required_argument, 0, 0xD002 },
+			                                    { "doh-host",  required_argument, 0, 0xD003 },
+			                                    { "doh-path",  required_argument, 0, 0xD004 },
+			                                    { "doh-query", required_argument, 0, 0xD005 },*/
+			                                    { 0, 0, 0, 0 }
 		};
 
-		c = getopt_long(argc, argv, "hT:p:P:u:v", long_options, &option_index);
+		c = getopt_long(argc, argv, "hT:p:P:u:v", long_options, &option_index);  // : significa que requiere argumento
 		if (c == -1)
 			break;
 
 		switch (c) {
-			case 'h': {
+			case 'h':
 				usage(argv[0]);
-			} break;
-
-			case 'l': {
-				args->smtp_addr = optarg;
-			} break;
-
-			case 'L':{
-				args->mng_addr = optarg;
-			} break;
-
-			case 'T': {
-				args->transformation_program = optarg;
-			} break;
-
-			case 'p': {
+				break;
+			case 'T':
+				args->transformations = optarg;
+				break;
+			case 'p':
 				args->smtp_port = port(optarg);
-			} break;
-
-			case 'P': {
+				break;
+			case 'P':
 				args->mng_port = port(optarg);
-			} break;
-
-			case 'u': {
-				if (nusers >= MAX_USERS) {
-					fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
-					exit(1);
-				} else {
-					user(optarg, args->users + nusers);
-					nusers++;
-				}
-			} break;
-
-			case 'v': {
+				break;
+			case 'u':
+				args->pass = (char*)pass(optarg);
+				break;
+			case 'v':
 				version();
 				exit(0);
-			} break;
-
-			/* case 0xD001: {
+				break;
+			/*case 0xD001:
 				args->doh.ip = optarg;
-			} break;
-
-			case 0xD002: {
+				break;
+			case 0xD002:
 				args->doh.port = port(optarg);
-			} break;
-
-			case 0xD003: {
+				break;
+			case 0xD003:
 				args->doh.host = optarg;
-			} break;
-
-			case 0xD004: {
+				break;
+			case 0xD004:
 				args->doh.path = optarg;
-			} break;
-
-			case 0xD005: {
+				break;
+			case 0xD005:
 				args->doh.query = optarg;
-			} break; */
-
-			default: {
+				break;*/
+			default:
 				fprintf(stderr, "unknown argument %d.\n", c);
 				exit(1);
-			} break;
 		}
 	}
-
 	if (optind < argc) {
 		fprintf(stderr, "argument not accepted: ");
 		while (optind < argc) {
